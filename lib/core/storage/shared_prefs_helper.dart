@@ -41,6 +41,18 @@ class SharedPrefsHelper {
     await prefs.setInt(key, value);
   }
 
+  // ── Double ────────────────────────────────────────────────────
+
+  Future<double?> getDouble(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(key);
+  }
+
+  Future<void> setDouble(String key, double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(key, value);
+  }
+
   // ── Utility ──────────────────────────────────────────────────
 
   Future<void> clear() async {

@@ -3,6 +3,7 @@ import 'package:adhan/adhan.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sabbh/core/data/cities_data.dart';
+import 'package:sabbh/core/storage/shared_prefs_helper.dart';
 
 // ── State ────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ class PrayerLoaded extends PrayerState {
   final PrayerTimes times;
   final Prayer nextPrayer;
   final DateTime nextPrayerTime;
+  final Map<String, int> adjustments;
 
   PrayerLoaded({
     required this.locationName,
@@ -27,6 +29,7 @@ class PrayerLoaded extends PrayerState {
     required this.times,
     required this.nextPrayer,
     required this.nextPrayerTime,
+    required this.adjustments,
   });
 }
 
@@ -38,7 +41,65 @@ class PrayerError extends PrayerState {
 // ── Cubit ────────────────────────────────────────────────────────
 
 class PrayerCubit extends Cubit<PrayerState> {
-  PrayerCubit() : super(PrayerInitial());
+  PrayerCubit() : super(PrayerInitial()) {
+    _loadSavedLocation();
+  }
+
+  static const _keyLat  = 'prayer_lat';
+  static const _keyLng  = 'prayer_lng';
+  static const _keyName = 'prayer_location_name';
+
+  static const prayerKeys = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+  static const prayerLabels = {
+    'fajr': 'الفجر',
+    'dhuhr': 'الظهر',
+    'asr': 'العصر',
+    'maghrib': 'المغرب',
+    'isha': 'العشاء',
+  };
+
+  Map<String, int> _adjustments = {
+    'fajr': 0, 'dhuhr': 0, 'asr': 0, 'maghrib': 0, 'isha': 0,
+  };
+
+  Map<String, int> get adjustments => Map.unmodifiable(_adjustments);
+
+  // ── Adjustments ────────────────────────────────────────────────
+
+  Future<void> _loadAdjustments() async {
+    final prefs = SharedPrefsHelper();
+    for (final key in prayerKeys) {
+      _adjustments[key] = await prefs.getInt('adj_$key') ?? 0;
+    }
+  }
+
+  Future<void> setAdjustment(String prayerKey, int minutes) async {
+    _adjustments[prayerKey] = minutes;
+    await SharedPrefsHelper().setInt('adj_$prayerKey', minutes);
+    _recalculate();
+  }
+
+  // ── Restore last saved location on startup ─────────────────────
+  Future<void> _loadSavedLocation() async {
+    await _loadAdjustments();
+    final prefs = SharedPrefsHelper();
+    final lat  = await prefs.getDouble(_keyLat);
+    final lng  = await prefs.getDouble(_keyLng);
+    final name = await prefs.getString(_keyName);
+    if (lat != null && lng != null && name != null) {
+      _calculate(lat, lng, name);
+    }
+  }
+
+  // ── Persist current location ───────────────────────────────────
+  Future<void> _saveLocation(double lat, double lng, String name) async {
+    final prefs = SharedPrefsHelper();
+    await Future.wait([
+      prefs.setDouble(_keyLat, lat),
+      prefs.setDouble(_keyLng, lng),
+      prefs.setString(_keyName, name),
+    ]);
+  }
 
   // ── GPS Flow ───────────────────────────────────────────────────
   Future<void> requestGPS() async {
@@ -69,7 +130,6 @@ class PrayerCubit extends Cubit<PrayerState> {
         ),
       );
 
-      // Find closest city from our JSON to display its name
       final cities = await CitiesRepository.load();
       CityEntry? closestCity;
       double minDistance = double.infinity;
@@ -101,11 +161,28 @@ class PrayerCubit extends Cubit<PrayerState> {
     _calculate(city.lat, city.lng, city.displayName);
   }
 
+  // ── Recalculate with current location (after adjustment change) ─
+  void _recalculate() {
+    final s = state;
+    if (s is PrayerLoaded) {
+      _calculate(s.lat, s.lng, s.locationName);
+    }
+  }
+
   // ── Core Calculation ───────────────────────────────────────────
   void _calculate(double lat, double lng, String name) {
     try {
       final coords = Coordinates(lat, lng);
       final params  = CalculationMethod.umm_al_qura.getParameters();
+
+      params.adjustments = PrayerAdjustments(
+        fajr:    _adjustments['fajr']    ?? 0,
+        dhuhr:   _adjustments['dhuhr']   ?? 0,
+        asr:     _adjustments['asr']     ?? 0,
+        maghrib: _adjustments['maghrib'] ?? 0,
+        isha:    _adjustments['isha']    ?? 0,
+      );
+
       final date    = DateComponents.from(DateTime.now());
       final times   = PrayerTimes(coords, date, params);
 
@@ -119,7 +196,10 @@ class PrayerCubit extends Cubit<PrayerState> {
         times: times,
         nextPrayer: next,
         nextPrayerTime: nextTime,
+        adjustments: Map.from(_adjustments),
       ));
+
+      _saveLocation(lat, lng, name);
     } catch (e) {
       emit(PrayerError('خطأ في حساب مواقيت الصلاة: $e'));
     }

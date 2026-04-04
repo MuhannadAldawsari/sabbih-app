@@ -19,11 +19,11 @@ class MainScaffold extends StatefulWidget {
 class _MainScaffoldState extends State<MainScaffold> {
   int _currentIndex = 0;
 
-  static const List<Widget> _pages = [
-    HomePage(),
-    Page2(),
-    Page3(),
-    SettingsPage(),
+  List<Widget> get _pages => [
+    const HomePage(),
+    const Page2(),
+    Page3(isActive: _currentIndex == 2),
+    const SettingsPage(),
   ];
 
   @override
@@ -40,7 +40,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         final items = [
           _NavItem(icon: Icons.home_rounded,              label: 'الرئيسية'),
           _NavItem(icon: Icons.mosque_rounded,            label: 'مواقيت الصلاة'),
-          _NavItem(icon: Icons.self_improvement_rounded,  label: 'صفحة 3'),
+          _NavItem(icon: Icons.explore_rounded,             label: 'القبلة'),
           _NavItem(icon: Icons.settings_rounded,          label: 'الإعدادات'),
         ];
 

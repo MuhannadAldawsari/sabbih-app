@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/views/pages/notification_settings_page.dart';
+import 'package:sabbh/views/pages/prayer_adjustments_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -22,7 +24,9 @@ class SettingsPage extends StatelessWidget {
 
         return Scaffold(
           backgroundColor: bg,
+          extendBody: true,
           body: SafeArea(
+            bottom: false,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
               children: [
@@ -180,6 +184,58 @@ class SettingsPage extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── أوقات الأذان ──────────────────────────────
+                _sectionLabel('أوقات الأذان', settings, subColor),
+                const SizedBox(height: 8),
+                _card(
+                  cardBg: cardBg,
+                  child: InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MultiBlocProvider(
+                          providers: [
+                            BlocProvider.value(value: context.read<AppSettingsCubit>()),
+                            BlocProvider.value(value: context.read<PrayerCubit>()),
+                          ],
+                          child: const PrayerAdjustmentsPage(),
+                        ),
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      child: Row(
+                        textDirection: TextDirection.rtl,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.schedule_rounded, color: accent, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('تعديل أوقات الأذان',
+                                    style: _font(settings, 15, textColor, FontWeight.w600)),
+                                Text('إضافة أو طرح دقائق لكل صلاة',
+                                    style: _font(settings, 12, subColor, FontWeight.normal)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right_rounded, color: subColor),
+                        ],
+                      ),
                     ),
                   ),
                 ),

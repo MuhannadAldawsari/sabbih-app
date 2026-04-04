@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 import 'package:sabbh/views/main_scaffold.dart';
 
@@ -19,8 +20,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => AppSettingsCubit(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => AppSettingsCubit()),
+        BlocProvider(create: (_) => PrayerCubit()),
+      ],
       child: BlocBuilder<AppSettingsCubit, AppSettingsState>(
         builder: (context, settings) {
           final isDark = settings.isDarkMode;

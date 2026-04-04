@@ -137,8 +137,8 @@ class _HomeHeader extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [accentDark, accent],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
             ),
             borderRadius: const BorderRadius.only(
               bottomLeft:  Radius.circular(22),

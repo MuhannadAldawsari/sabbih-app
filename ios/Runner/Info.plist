@@ -46,9 +46,13 @@
 	
 	<!-- Location permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يحتاج التطبيق إلى موقعك لحساب مواقيت الصلاة بدقة.</string>
+	<string>يحتاج التطبيق إلى موقعك لحساب مواقيت الصلاة واتجاه القبلة بدقة.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>يحتاج التطبيق إلى موقعك لحساب مواقيت الصلاة بدقة.</string>
+	<string>يحتاج التطبيق إلى موقعك لحساب مواقيت الصلاة واتجاه القبلة بدقة.</string>
+	
+	<!-- Motion & compass sensors -->
+	<key>NSMotionUsageDescription</key>
+	<string>يحتاج التطبيق إلى حساسات الحركة لتحديد اتجاه القبلة بدقة.</string>
 
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>

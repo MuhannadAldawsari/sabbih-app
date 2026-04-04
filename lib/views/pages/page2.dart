@@ -13,10 +13,7 @@ class Page2 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => PrayerCubit(),
-      child: const _PrayerTimesView(),
-    );
+    return const _PrayerTimesView();
   }
 }
 
@@ -598,9 +595,10 @@ IconData _prayerIcon(Prayer p) {
 }
 
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
+  final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+    case 1:  return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight);
+    case 2:  return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight);
+    default: return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight);
   }
 }
