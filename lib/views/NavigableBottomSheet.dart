@@ -178,8 +178,8 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
         Container(
           height: MediaQuery.of(context).size.height * 0.55,
           decoration: BoxDecoration(
-            color:isDarkMode? ColorsManager.darkAppbarColor: Colors.white,
-            borderRadius: BorderRadius.only(
+            color: isDarkMode ? ColorsManager.darkCard : ColorsManager.lightCard,
+            borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(30),
               topRight: Radius.circular(30),
             ),
@@ -197,7 +197,7 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
                       onPressed: currentIndex > 0 ? goToPrevious : null,
                       icon: Icon(
                         Icons.arrow_back_ios,
-                        color: currentIndex > 0 ? Colors.blue : Colors.grey,
+                        color: currentIndex > 0 ? (isDarkMode ? ColorsManager.darkAccent : ColorsManager.lightAccent) : ColorsManager.grey,
                       ),
                       iconSize: 30,
                     ),
@@ -217,7 +217,7 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
                       onPressed: currentIndex < dkr.length - 1 ? goToNext : null,
                       icon: Icon(
                         Icons.arrow_forward_ios,
-                        color: currentIndex < dkr.length - 1 ? Colors.blue : Colors.grey,
+                        color: currentIndex < dkr.length - 1 ? (isDarkMode ? ColorsManager.darkAccent : ColorsManager.lightAccent) : ColorsManager.grey,
                       ),
                       iconSize: 30,
                     ),
@@ -282,7 +282,7 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
                   child: ElevatedButton(
                     onPressed: incrementCounter,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: isDarkMode ? ColorsManager.darkAccent : ColorsManager.lightAccent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -309,7 +309,7 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
           left: 20,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.8),
+              color: Colors.red.withValues(alpha: 0.8),
               shape: BoxShape.circle,
             ),
             child: IconButton(
@@ -331,22 +331,22 @@ class _NavigableBottomSheetState extends State<NavigableBottomSheet>
 Container dkrCard(List dkr, int currentIndex, bool isDarkMode){
   return Container(
   width: double.infinity,
-  padding: EdgeInsets.all(20),
+  padding: const EdgeInsets.all(20),
   decoration: BoxDecoration(
-    color: isDarkMode ? Colors.grey[800] : Colors.grey[50],
+    color: isDarkMode ? ColorsManager.darkCardAlt : ColorsManager.lightCardAlt,
     borderRadius: BorderRadius.circular(15),
     border: Border.all(
-      color: isDarkMode ? Colors.grey[600]! : Colors.grey[200]!
+      color: isDarkMode ? ColorsManager.darkDivider : ColorsManager.lightDivider,
     ),
   ),
   child: Text(
     dkr[currentIndex],
-    textDirection: TextDirection.rtl, // Right-to-left
+    textDirection: TextDirection.rtl,
     textAlign: TextAlign.start,
     style: TextStyle(
       fontSize: 16,
-      height: 1.6, // Line height for better readability
-      color: isDarkMode ? Colors.white : Colors.black87,
+      height: 1.6,
+      color: isDarkMode ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary,
     ),
   ),
 );

@@ -1,40 +1,50 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 class SharedPrefsHelper {
   static final SharedPrefsHelper _instance = SharedPrefsHelper._internal();
-
-  late SharedPreferences _prefs;
-
-
   SharedPrefsHelper._internal();
-
   factory SharedPrefsHelper() => _instance;
 
+  // ── String ───────────────────────────────────────────────────
 
-  Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+  Future<String?> getString(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(key);
   }
 
-
-  String? getString(String key){
-   return  _prefs.getString(key);
+  Future<void> setString(String key, String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
   }
 
-  Future<void> setString(String key, String value) =>
-      _prefs.setString(key, value);
+  // ── Bool ─────────────────────────────────────────────────────
 
+  Future<bool?> getBool(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(key);
+  }
 
-  Future<void> clear() =>
-      _prefs.clear();
+  Future<void> setBool(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
 
-  Future<bool> setBool(String key, bool value) async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.setBool(key, value);
-}
+  // ── Int ──────────────────────────────────────────────────────
 
-Future<bool?> getBool(String key) async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getBool(key);
-}
+  Future<int?> getInt(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(key);
+  }
+
+  Future<void> setInt(String key, int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, value);
+  }
+
+  // ── Utility ──────────────────────────────────────────────────
+
+  Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+  }
 }
