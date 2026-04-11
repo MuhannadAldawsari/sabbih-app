@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
@@ -21,6 +24,14 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   TimeOfDay _sleepTime   = const TimeOfDay(hour: 22, minute: 30);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(IqamaNotificationService.instance.ensureAndroidNotificationPermission());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return BlocBuilder<AppSettingsCubit, AppSettingsState>(
       builder: (context, settings) {
@@ -32,21 +43,26 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
         final subColor  = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
         final divider   = isDark ? ColorsManager.darkDivider : ColorsManager.lightDivider;
 
-        return Scaffold(
-          backgroundColor: bg,
-          appBar: AppBar(
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
             backgroundColor: bg,
-            elevation: 0,
-            centerTitle: true,
-            title: Text('اعدادات التنبيهات', style: _font(settings, 20, textColor, FontWeight.bold)),
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor),
-              onPressed: () => Navigator.pop(context),
+            appBar: AppBar(
+              backgroundColor: bg,
+              elevation: 0,
+              centerTitle: true,
+              title: Text('اعدادات التنبيهات', style: _font(settings, 20, textColor, FontWeight.bold)),
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.arrow_forward_ios_rounded, color: textColor),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            children: [
+            body: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              children: [
               // ── Master Toggle ─────────────────────────────────
               _sectionLabel('عام', settings, subColor),
               const SizedBox(height: 8),
@@ -61,7 +77,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                   settings: settings,
                   textColor: textColor,
                   subColor: subColor,
-                  onChanged: (v) => setState(() => _notificationsEnabled = v),
+                  onChanged: (v) async {
+                    if (v) {
+                      await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
+                    }
+                    setState(() => _notificationsEnabled = v);
+                  },
                 ),
               ),
               if (_notificationsEnabled) ...[
@@ -181,7 +202,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 ),
               ],
               const SizedBox(height: 100),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -192,8 +214,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
 
   Widget _sectionLabel(String text, AppSettingsState s, Color color) {
     return Align(
-      alignment: AlignmentDirectional.centerEnd,
-      child: Text(text, style: _font(s, 13, color, FontWeight.w600)),
+      alignment: Alignment.centerRight,
+      child: Text(
+        text,
+        textAlign: TextAlign.right,
+        style: _font(s, 13, color, FontWeight.w600),
+      ),
     );
   }
 
@@ -221,7 +247,6 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
-        textDirection: TextDirection.rtl,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -234,13 +259,20 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: _font(settings, 15, textColor, FontWeight.w600)),
-                Text(subtitle, style: _font(settings, 12, subColor, FontWeight.normal)),
+                Text(
+                  title,
+                  style: _font(settings, 15, textColor, FontWeight.w600),
+                ),
+                Text(
+                  subtitle,
+                  style: _font(settings, 12, subColor, FontWeight.normal),
+                ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Switch(
             value: value,
             onChanged: onChanged,

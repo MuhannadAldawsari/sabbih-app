@@ -153,7 +153,7 @@ class _Header extends StatelessWidget {
       child: Column(
         children: [
           Align(
-            alignment: Alignment.centerRight,
+            alignment: Alignment.centerLeft,
             child: GestureDetector(
               onTap: onBack,
               child: const Padding(

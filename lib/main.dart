@@ -1,9 +1,13 @@
+import 'dart:async';
+
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 import 'package:sabbh/views/main_scaffold.dart';
@@ -13,6 +17,18 @@ void main() async {
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const MyApp());
+  unawaited(_bootstrapBackgroundServices());
+}
+
+Future<void> _bootstrapBackgroundServices() async {
+  try {
+    await AndroidAlarmManager.initialize();
+    await IqamaNotificationService.instance.init();
+    await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
+    await IqamaNotificationService.instance.restoreFromPrefsAndStartIfNeeded();
+  } catch (_) {
+    // Never block app startup for notification services.
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -28,6 +44,7 @@ class MyApp extends StatelessWidget {
       child: BlocBuilder<AppSettingsCubit, AppSettingsState>(
         builder: (context, settings) {
           final isDark = settings.isDarkMode;
+          unawaited(IqamaNotificationService.instance.updateThemeMode(isDark));
 
           // Build TextTheme from selected font & size
           final baseSize = settings.baseFontSize;

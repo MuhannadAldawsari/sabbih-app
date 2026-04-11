@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
-import 'package:sabbh/views/NavigableBottomSheet.dart';
+import 'package:sabbh/views/navigable_bottom_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
@@ -268,11 +268,9 @@ class _DhikrGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent    = isDark ? ColorsManager.darkAccent  : ColorsManager.lightAccent;
     final cardWhite  = isDark ? ColorsManager.darkCard   : ColorsManager.lightCard;
     final textColor  = isDark ? ColorsManager.darkTextPrimary   : ColorsManager.lightTextPrimary;
     final iconColor  = isDark ? ColorsManager.darkAccent        : ColorsManager.lightAccent;
-    final subText    = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
 
     // Subtle white gradients
     final brownGradient = LinearGradient(

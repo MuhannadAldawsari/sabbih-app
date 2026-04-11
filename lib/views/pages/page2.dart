@@ -35,8 +35,8 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
   void initState() {
     super.initState();
     _loadCities();
-    // Refresh countdown every minute
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) => setState(() {}));
+    // Refresh countdown every second for HH:MM:SS display.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
   }
 
   @override
@@ -168,6 +168,9 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
     Color textColor,
     Color subColor,
   ) {
+    final display = _buildCountdownDisplay(state, DateTime.now());
+    final highlightedPrayer = display.isIqama ? display.prayer : state.nextPrayer;
+
     final prayers = [
       _PrayerEntry('الفجر',   Prayer.fajr,    Icons.brightness_3_rounded, state.times.fajr),
       _PrayerEntry('الشروق',  Prayer.sunrise, Icons.wb_twilight_rounded,  state.times.sunrise),
@@ -178,7 +181,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
     ];
 
     return prayers.map((p) {
-      final isNext = state.nextPrayer == p.prayer;
+      final isNext = highlightedPrayer == p.prayer;
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: _PrayerCard(
@@ -347,11 +350,20 @@ class _NextPrayerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now       = DateTime.now();
-    final diff      = state.nextPrayerTime.difference(now);
-    final hours     = diff.inHours;
-    final minutes   = diff.inMinutes % 60;
-    final countdown = hours > 0 ? '$hours ساعة و$minutes دقيقة' : '$minutes دقيقة';
-    final name      = _prayerName(state.nextPrayer);
+    final display   = _buildCountdownDisplay(state, now);
+    final name      = _prayerName(display.prayer);
+
+    final iqamaLightStart = const Color(0xFFC87D24);
+    final iqamaLightEnd   = const Color(0xFFE79B3C);
+    final iqamaDarkStart  = const Color(0xFF7D4D14);
+    final iqamaDarkEnd    = const Color(0xFFB06E1C);
+
+    final cardStart = display.isIqama
+        ? (isDark ? iqamaDarkStart : iqamaLightStart)
+        : accentDark;
+    final cardEnd = display.isIqama
+        ? (isDark ? iqamaDarkEnd : iqamaLightEnd)
+        : accent;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
@@ -359,14 +371,14 @@ class _NextPrayerCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [accentDark, accent],
+            colors: [cardStart, cardEnd],
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
           ),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: accent.withValues(alpha: 0.35),
+              color: cardEnd.withValues(alpha: 0.35),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
@@ -375,35 +387,35 @@ class _NextPrayerCard extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Countdown
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('الوقت المتبقي',
-                    style: _font(settings, 12,
-                        ColorsManager.white.withValues(alpha: 0.80), FontWeight.normal)),
-                const SizedBox(height: 4),
-                Text(countdown,
-                    style: _font(settings, 18, ColorsManager.white, FontWeight.bold)),
-              ],
-            ),
-            // Prayer name + icon
+            // Prayer name + icon (right side in RTL)
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('الصلاة القادمة',
+                Text(display.isIqama ? 'الصلاة الحالية' : 'الصلاة القادمة',
                     style: _font(settings, 12,
                         ColorsManager.white.withValues(alpha: 0.80), FontWeight.normal)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
+                    Icon(_prayerIcon(display.prayer),
+                        color: ColorsManager.white, size: 22),
+                    const SizedBox(width: 8),
                     Text(name,
                         style: _font(settings, 18, ColorsManager.white, FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Icon(_prayerIcon(state.nextPrayer),
-                        color: ColorsManager.white, size: 22),
                   ],
                 ),
+              ],
+            ),
+            // Countdown (left side in RTL)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(display.isIqama ? 'وقت الإقامة' : 'الوقت المتبقي',
+                    style: _font(settings, 12,
+                        ColorsManager.white.withValues(alpha: 0.80), FontWeight.normal)),
+                const SizedBox(height: 4),
+                Text(display.text,
+                    style: _font(settings, 18, ColorsManager.white, FontWeight.bold)),
               ],
             ),
           ],
@@ -411,6 +423,76 @@ class _NextPrayerCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CountdownDisplay {
+  final Prayer prayer;
+  final String text;
+  final bool isIqama;
+  const _CountdownDisplay({
+    required this.prayer,
+    required this.text,
+    required this.isIqama,
+  });
+}
+
+_CountdownDisplay _buildCountdownDisplay(PrayerLoaded state, DateTime now) {
+  const iqamaWindow = Duration(minutes: 30);
+  final schedule = <Prayer, DateTime>{
+    Prayer.fajr: state.times.fajr,
+    Prayer.dhuhr: state.times.dhuhr,
+    Prayer.asr: state.times.asr,
+    Prayer.maghrib: state.times.maghrib,
+    Prayer.isha: state.times.isha,
+  };
+
+  // 1) If we are within 30 minutes after any prayer start => Iqama mode.
+  Prayer? currentPrayer;
+  DateTime? currentStart;
+  for (final entry in schedule.entries) {
+    if (!entry.value.isAfter(now)) {
+      if (currentStart == null || entry.value.isAfter(currentStart)) {
+        currentStart = entry.value;
+        currentPrayer = entry.key;
+      }
+    }
+  }
+  if (currentPrayer != null && currentStart != null) {
+    final elapsed = now.difference(currentStart);
+    if (elapsed >= Duration.zero && elapsed < iqamaWindow) {
+      return _CountdownDisplay(
+        prayer: currentPrayer,
+        text: _formatMmSs(elapsed),
+        isIqama: true,
+      );
+    }
+  }
+
+  // 2) Otherwise show next upcoming obligatory prayer countdown HH:MM:SS.
+  Prayer nextPrayer = Prayer.fajr;
+  DateTime nextTime = state.times.fajr.add(const Duration(days: 1));
+  for (final entry in schedule.entries) {
+    if (entry.value.isAfter(now)) {
+      nextPrayer = entry.key;
+      nextTime = entry.value;
+      break;
+    }
+  }
+
+  final remaining = nextTime.difference(now);
+  if (remaining <= const Duration(seconds: 1)) {
+    return _CountdownDisplay(
+      prayer: nextPrayer,
+      text: _formatMmSs(Duration.zero),
+      isIqama: true,
+    );
+  }
+
+  return _CountdownDisplay(
+    prayer: nextPrayer,
+    text: _formatHhMmSs(remaining),
+    isIqama: false,
+  );
 }
 
 // ── Individual Prayer Card ────────────────────────────────────────
@@ -461,18 +543,7 @@ class _PrayerCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Time (left side in RTL = visual left)
-          Text(timeStr,
-              style: _font(settings, 16,
-                  isNext ? accent : subColor, FontWeight.w600)),
-
-          const Spacer(),
-
-          // Name + icon (right side in RTL = visual right)
-          Text(entry.name,
-              style: _font(settings, 16,
-                  isNext ? accent : textColor, FontWeight.w700)),
-          const SizedBox(width: 12),
+          // Icon (first child in RTL => visual right)
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -481,6 +552,31 @@ class _PrayerCard extends StatelessWidget {
             ),
             child: Icon(entry.icon,
                 color: accent, size: 18),
+          ),
+          const SizedBox(width: 12),
+          // Text (center)
+          Expanded(
+            child: Text(
+              entry.name,
+              textAlign: TextAlign.right,
+              style: _font(
+                settings,
+                16,
+                isNext ? accent : textColor,
+                FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Time (last child in RTL => visual left)
+          Text(
+            timeStr,
+            style: _font(
+              settings,
+              16,
+              isNext ? accent : subColor,
+              FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -568,6 +664,21 @@ String _formatTime(DateTime dt) {
   final period = h >= 12 ? 'م' : 'ص';
   final hour12 = h % 12 == 0 ? 12 : h % 12;
   return '$hour12:$m $period';
+}
+
+String _formatHhMmSs(Duration d) {
+  final safe = d.isNegative ? Duration.zero : d;
+  final h = safe.inHours;
+  final m = safe.inMinutes.remainder(60);
+  final s = safe.inSeconds.remainder(60);
+  return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+}
+
+String _formatMmSs(Duration d) {
+  final safe = d.isNegative ? Duration.zero : d;
+  final m = safe.inMinutes.remainder(60);
+  final s = safe.inSeconds.remainder(60);
+  return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
 String _prayerName(Prayer p) {

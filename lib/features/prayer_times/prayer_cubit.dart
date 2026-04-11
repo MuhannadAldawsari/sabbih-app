@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sabbh/core/data/cities_data.dart';
 import 'package:sabbh/core/storage/shared_prefs_helper.dart';
+import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 
 // ── State ────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ class PrayerCubit extends Cubit<PrayerState> {
     'isha': 'العشاء',
   };
 
-  Map<String, int> _adjustments = {
+  final Map<String, int> _adjustments = {
     'fajr': 0, 'dhuhr': 0, 'asr': 0, 'maghrib': 0, 'isha': 0,
   };
 
@@ -200,6 +201,10 @@ class PrayerCubit extends Cubit<PrayerState> {
       ));
 
       _saveLocation(lat, lng, name);
+      IqamaNotificationService.instance.syncPrayerTimes(
+        times: times,
+        locationName: name,
+      );
     } catch (e) {
       emit(PrayerError('خطأ في حساب مواقيت الصلاة: $e'));
     }

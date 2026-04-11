@@ -1,5 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sabbh/core/storage/shared_prefs_helper.dart';
+import 'package:sabbh/features/iqama_notification/iqama_countdown_logic.dart';
+import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
+
+const _kIqamaNotifEnabled = 'iqama_notif_enabled';
+const _kIqamaNotifMode = 'iqama_notif_mode';
+const _kLegacyIqamaNotifEnabled = 'iqamaNotifEnabled';
+const _kLegacyIqamaNotifMode = 'iqamaNotifMode';
 
 // ── App Settings State ──────────────────────────────────────────
 
@@ -7,22 +14,30 @@ class AppSettingsState {
   final bool isDarkMode;
   final int fontSizeLevel;    // 0–7  (maps to 13–27pt)
   final int fontFamilyIndex;  // 0=Tajawal, 1=Cairo, 2=Amiri
+  final bool iqamaNotifEnabled;
+  final IqamaNotifMode iqamaNotifMode;
 
   const AppSettingsState({
     required this.isDarkMode,
     required this.fontSizeLevel,
     required this.fontFamilyIndex,
+    required this.iqamaNotifEnabled,
+    required this.iqamaNotifMode,
   });
 
   AppSettingsState copyWith({
     bool? isDarkMode,
     int? fontSizeLevel,
     int? fontFamilyIndex,
+    bool? iqamaNotifEnabled,
+    IqamaNotifMode? iqamaNotifMode,
   }) {
     return AppSettingsState(
       isDarkMode: isDarkMode ?? this.isDarkMode,
       fontSizeLevel: fontSizeLevel ?? this.fontSizeLevel,
       fontFamilyIndex: fontFamilyIndex ?? this.fontFamilyIndex,
+      iqamaNotifEnabled: iqamaNotifEnabled ?? this.iqamaNotifEnabled,
+      iqamaNotifMode: iqamaNotifMode ?? this.iqamaNotifMode,
     );
   }
 
@@ -46,6 +61,8 @@ class AppSettingsCubit extends Cubit<AppSettingsState> {
           isDarkMode: false,
           fontSizeLevel: 2,        // default: 16pt
           fontFamilyIndex: 0,      // default: Tajawal
+          iqamaNotifEnabled: false,
+          iqamaNotifMode: IqamaNotifMode.before45,
         )) {
     _loadSettings();
   }
@@ -58,10 +75,26 @@ class AppSettingsCubit extends Cubit<AppSettingsState> {
       final isDark   = await prefs.getBool('isDarkMode') ?? false;
       final fontSize = await prefs.getInt('fontSizeLevel') ?? 2;
       final fontFam  = await prefs.getInt('fontFamilyIndex') ?? 0;
+      final iqamaEnabled =
+          await prefs.getBool(_kIqamaNotifEnabled) ??
+          await prefs.getBool(_kLegacyIqamaNotifEnabled) ??
+          false;
+      await IqamaNotificationService.ensureModePrefsMigrated();
+      final iqamaIdx =
+          await prefs.getInt(_kIqamaNotifMode) ?? IqamaNotifMode.before45.index;
+      final iqamaMode = IqamaNotifMode.values[
+          iqamaIdx.clamp(0, IqamaNotifMode.values.length - 1)];
+      // Keep legacy keys synced for users upgrading from older builds.
+      await prefs.setBool(_kLegacyIqamaNotifEnabled, iqamaEnabled);
+      await prefs.setInt(_kLegacyIqamaNotifMode, iqamaMode.index);
+      await prefs.setBool(_kIqamaNotifEnabled, iqamaEnabled);
+      await prefs.setInt(_kIqamaNotifMode, iqamaMode.index);
       emit(state.copyWith(
         isDarkMode: isDark,
         fontSizeLevel: fontSize,
         fontFamilyIndex: fontFam,
+        iqamaNotifEnabled: iqamaEnabled,
+        iqamaNotifMode: iqamaMode,
       ));
     } catch (_) {
       // keep defaults
@@ -86,5 +119,19 @@ class AppSettingsCubit extends Cubit<AppSettingsState> {
     final clamped = index.clamp(0, 2);
     emit(state.copyWith(fontFamilyIndex: clamped));
     await SharedPrefsHelper().setInt('fontFamilyIndex', clamped);
+  }
+
+  Future<void> setIqamaNotifEnabled(bool enabled) async {
+    emit(state.copyWith(iqamaNotifEnabled: enabled));
+    final prefs = SharedPrefsHelper();
+    await prefs.setBool(_kIqamaNotifEnabled, enabled);
+    await prefs.setBool(_kLegacyIqamaNotifEnabled, enabled);
+  }
+
+  Future<void> setIqamaNotifMode(IqamaNotifMode mode) async {
+    emit(state.copyWith(iqamaNotifMode: mode));
+    final prefs = SharedPrefsHelper();
+    await prefs.setInt(_kIqamaNotifMode, mode.index);
+    await prefs.setInt(_kLegacyIqamaNotifMode, mode.index);
   }
 }
