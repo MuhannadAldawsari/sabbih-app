@@ -27,7 +27,7 @@ const _kNotifChannelDescription = 'إشعار حي للوقت المتبقي ل�
 const _kNotifId = 808;
 const _kAndroidNotificationFlagNoClear = 32;
 const _kShowAlarmBaseId = 1200;
-const _kHideAlarmBaseId = 2200;
+const _kMidnightAlarmId = 3000;
 const _kAlarmRevision = 'iqama_alarm_revision';
 const _kIqamaNotifModeSchemaV2 = 'iqama_notif_mode_schema_v2';
 const _kLegacyIqamaNotifModeCamel = 'iqamaNotifMode';
@@ -139,6 +139,7 @@ class IqamaNotificationService {
     } else {
       await _bumpAlarmRevision();
       await _cancelAllWindowAlarms();
+      await AndroidAlarmManager.cancel(_kMidnightAlarmId);
       await stop();
     }
   }
@@ -160,12 +161,11 @@ class IqamaNotificationService {
     required String prayerName,
     required String location,
     required DateTime targetTime,
-    required bool isIqama,
+    required int timeoutAfterMs,
   }) async {
     final content = _buildNotificationContent(
       prayerName: prayerName,
       location: location,
-      isIqama: isIqama,
       adhanLocalTime: targetTime,
     );
     final isDark = await _resolveDarkThemeForNotification();
@@ -178,6 +178,7 @@ class IqamaNotificationService {
           isDarkTheme: isDark,
           whenMillis: targetTime.millisecondsSinceEpoch,
           bigText: content.bigText,
+          timeoutAfterMs: timeoutAfterMs,
         ),
       ),
     );
@@ -194,8 +195,9 @@ class IqamaNotificationService {
     required bool isDarkTheme,
     required int whenMillis,
     required String bigText,
+    required int timeoutAfterMs,
   }) {
-    final background =ColorsManager.iqamaNotifAdhanBackgroundDark;
+    final background = ColorsManager.iqamaNotifAdhanBackgroundDark;
     return AndroidNotificationDetails(
       _kNotifChannelId,
       _kNotifChannelName,
@@ -217,6 +219,7 @@ class IqamaNotificationService {
       color: background,
       category: AndroidNotificationCategory.service,
       additionalFlags: Int32List.fromList(const [_kAndroidNotificationFlagNoClear]),
+      timeoutAfter: timeoutAfterMs,
     );
   }
 
@@ -258,15 +261,12 @@ class IqamaNotificationService {
       }
 
       final showId = _kShowAlarmBaseId + index;
-      final hideId = _kHideAlarmBaseId + index;
 
       await prefs.setInt('iqama_alarm_show_adhan_$showId', adhanTime.millisecondsSinceEpoch);
       await prefs.setString('iqama_alarm_show_prayer_$showId', _prayerName(prayer));
       await prefs.setInt('iqama_alarm_show_at_$showId', showTime.millisecondsSinceEpoch);
       await prefs.setInt('iqama_alarm_hide_at_$showId', hideTime.millisecondsSinceEpoch);
-      await prefs.setInt('iqama_alarm_hide_ref_$hideId', showId);
       await prefs.setInt('iqama_alarm_revision_$showId', revision);
-      await prefs.setInt('iqama_alarm_revision_$hideId', revision);
 
       if (showTime.isAfter(now)) {
         await AndroidAlarmManager.oneShotAt(
@@ -282,24 +282,15 @@ class IqamaNotificationService {
         await _showFromAlarmId(showId);
       }
 
-      await AndroidAlarmManager.oneShotAt(
-        hideTime,
-        hideId,
-        _hideAlarmCallback,
-        exact: true,
-        wakeup: true,
-        rescheduleOnReboot: true,
-        allowWhileIdle: true,
-      );
-
       index++;
     }
+
+    await _scheduleMidnightAlarm();
   }
 
   Future<void> _cancelAllWindowAlarms() async {
     for (var i = 0; i < 5; i++) {
       await AndroidAlarmManager.cancel(_kShowAlarmBaseId + i);
-      await AndroidAlarmManager.cancel(_kHideAlarmBaseId + i);
     }
   }
 
@@ -321,30 +312,72 @@ class IqamaNotificationService {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now < showAtMillis || now >= hideAtMillis) return;
 
+    final remainingMs = hideAtMillis - now;
+    if (remainingMs <= 0) return;
+
     await _showChronometerNotification(
       prayerName: prayerName,
       location: location,
       targetTime: DateTime.fromMillisecondsSinceEpoch(adhanMillis),
-      isIqama: false,
+      timeoutAfterMs: remainingMs,
     );
   }
 
-  Future<void> _hideFromAlarmId(int hideId) async {
+  Future<void> _scheduleMidnightAlarm() async {
+    await AndroidAlarmManager.cancel(_kMidnightAlarmId);
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1, 0, 5);
+    await AndroidAlarmManager.oneShotAt(
+      nextMidnight,
+      _kMidnightAlarmId,
+      _midnightRescheduleCallback,
+      exact: true,
+      wakeup: true,
+      rescheduleOnReboot: true,
+      allowWhileIdle: true,
+    );
+  }
+
+  Future<void> _recalculateAndReschedule() async {
     final prefs = SharedPrefsHelper();
     final enabled = await prefs.getBool(_kIqamaNotifEnabled) ?? false;
     if (!enabled) return;
-    final currentRevision = await prefs.getInt(_kAlarmRevision) ?? 0;
-    final alarmRevision = await prefs.getInt('iqama_alarm_revision_$hideId') ?? -1;
-    if (currentRevision != alarmRevision) return;
 
-    await _notifications.cancel(_kNotifId);
-    final showId = await prefs.getInt('iqama_alarm_hide_ref_$hideId');
-    if (showId == null) return;
-    final hideAtMillis = await prefs.getInt('iqama_alarm_hide_at_$showId');
-    if (hideAtMillis == null) return;
-    if (DateTime.now().millisecondsSinceEpoch >= hideAtMillis) {
-      await _notifications.cancel(_kNotifId);
-    }
+    final lat = await prefs.getDouble('prayer_lat');
+    final lng = await prefs.getDouble('prayer_lng');
+    if (lat == null || lng == null) return;
+
+    final adjFajr = await prefs.getInt('adj_fajr') ?? 0;
+    final adjDhuhr = await prefs.getInt('adj_dhuhr') ?? 0;
+    final adjAsr = await prefs.getInt('adj_asr') ?? 0;
+    final adjMaghrib = await prefs.getInt('adj_maghrib') ?? 0;
+    final adjIsha = await prefs.getInt('adj_isha') ?? 0;
+
+    final coords = Coordinates(lat, lng);
+    final params = CalculationMethod.umm_al_qura.getParameters();
+    params.adjustments = PrayerAdjustments(
+      fajr: adjFajr,
+      dhuhr: adjDhuhr,
+      asr: adjAsr,
+      maghrib: adjMaghrib,
+      isha: adjIsha,
+    );
+
+    final date = DateComponents.from(DateTime.now());
+    final times = PrayerTimes(coords, date, params);
+    final locationName =
+        await prefs.getString(_kIqamaNotifLocationName) ?? 'مواقيت الصلاة';
+
+    await Future.wait([
+      prefs.setInt(_kIqamaNotifFajr, times.fajr.millisecondsSinceEpoch),
+      prefs.setInt(_kIqamaNotifDhuhr, times.dhuhr.millisecondsSinceEpoch),
+      prefs.setInt(_kIqamaNotifAsr, times.asr.millisecondsSinceEpoch),
+      prefs.setInt(_kIqamaNotifMaghrib, times.maghrib.millisecondsSinceEpoch),
+      prefs.setInt(_kIqamaNotifIsha, times.isha.millisecondsSinceEpoch),
+    ]);
+
+    final mode = await _getMode();
+    await _scheduleWindowModeAlarms(mode);
   }
 
   Future<int> _bumpAlarmRevision() async {
@@ -401,15 +434,13 @@ String _formatAdhanWallClock(DateTime local) {
 _NotificationContent _buildNotificationContent({
   required String prayerName,
   required String location,
-  required bool isIqama,
   required DateTime adhanLocalTime,
 }) {
   final place = _notificationPlaceLine(location);
   final hijri = _notificationHijriLine();
   final timeStr = _formatAdhanWallClock(adhanLocalTime);
-  final phaseShort = isIqama ? 'الإقامة' : 'الأذان';
-  final title = '$prayerName، $phaseShort';
-  final body = hijri.isEmpty ? timeStr : '$hijri | $timeStr';
+  final title = 'صلاة $prayerName مع العداد';
+  final body = hijri.isEmpty ? timeStr : '$hijri   |   $timeStr';
   final bigText = '$title\n$body\n$place';
   return _NotificationContent(
     title: title,
@@ -425,15 +456,14 @@ Future<void> _showAlarmCallback() async {
   for (var i = 0; i < 5; i++) {
     await IqamaNotificationService.instance._showFromAlarmId(_kShowAlarmBaseId + i);
   }
+  await IqamaNotificationService.instance._scheduleMidnightAlarm();
 }
 
 @pragma('vm:entry-point')
-Future<void> _hideAlarmCallback() async {
+Future<void> _midnightRescheduleCallback() async {
   WidgetsFlutterBinding.ensureInitialized();
   await IqamaNotificationService.instance.init();
-  for (var i = 0; i < 5; i++) {
-    await IqamaNotificationService.instance._hideFromAlarmId(_kHideAlarmBaseId + i);
-  }
+  await IqamaNotificationService.instance._recalculateAndReschedule();
 }
 
 String _prayerName(Prayer p) {
