@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sabbh/core/data/cities_data.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 
-class PrayerAdjustmentsPage extends StatelessWidget {
+class PrayerAdjustmentsPage extends StatefulWidget {
   const PrayerAdjustmentsPage({super.key});
+
+  @override
+  State<PrayerAdjustmentsPage> createState() => _PrayerAdjustmentsPageState();
+}
+
+class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
+  List<CityEntry> _cities = [];
+  CityEntry? _selectedCity;
 
   static const _icons = {
     'fajr':    Icons.brightness_3_rounded,
@@ -15,6 +24,18 @@ class PrayerAdjustmentsPage extends StatelessWidget {
     'maghrib': Icons.nights_stay_rounded,
     'isha':    Icons.dark_mode_rounded,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCities();
+  }
+
+  Future<void> _loadCities() async {
+    final cities = await CitiesRepository.load();
+    if (!mounted) return;
+    setState(() => _cities = cities);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,9 +74,67 @@ class PrayerAdjustmentsPage extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                         child: Text(
-                          'يمكنك تعديل وقت الأذان بإضافة أو طرح دقائق لكل صلاة حسب حاجتك.',
+                          'يمكنك تعديل وقت الأذان، واختيار الموقع اليدوي من هنا.',
                           style: _font(settings, 13, subColor, FontWeight.normal),
                           textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+
+                    // Manual location selector (moved from prayer times page)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: ColorsManager.black.withValues(alpha: isDark ? 0.25 : 0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.location_city_rounded, color: accent, size: 21),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<CityEntry>(
+                                    value: _selectedCity,
+                                    isExpanded: true,
+                                    hint: Text(
+                                      'اختر المدينة (موقع يدوي)',
+                                      style: _font(settings, 13, subColor, FontWeight.normal),
+                                    ),
+                                    dropdownColor: cardBg,
+                                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: accent),
+                                    items: _cities
+                                        .map(
+                                          (c) => DropdownMenuItem(
+                                            value: c,
+                                            child: Text(
+                                              c.displayName,
+                                              style: _font(settings, 13, textColor, FontWeight.normal),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (city) {
+                                      if (city == null) return;
+                                      setState(() => _selectedCity = city);
+                                      context.read<PrayerCubit>().selectCity(city);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -167,7 +246,7 @@ class _Header extends StatelessWidget {
           Text('تعديل أوقات الأذان',
               style: _font(settings, 24, ColorsManager.white, FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('إضافة أو طرح دقائق',
+          Text('تعديل الدقائق + اختيار الموقع اليدوي',
               style: _font(settings, 13,
                   ColorsManager.white.withValues(alpha: 0.8), FontWeight.w500)),
         ],

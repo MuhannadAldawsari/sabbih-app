@@ -3,10 +3,12 @@ import 'package:adhan/adhan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:sabbh/core/data/cities_data.dart';
+import 'package:hijri/hijri_calendar.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
+import 'package:sabbh/views/pages/prayer_adjustments_page.dart';
+import 'package:sabbh/views/pages/prayer_calendar_page.dart';
 
 class Page2 extends StatelessWidget {
   const Page2({super.key});
@@ -27,14 +29,11 @@ class _PrayerTimesView extends StatefulWidget {
 }
 
 class _PrayerTimesViewState extends State<_PrayerTimesView> {
-  List<CityEntry> _cities = [];
-  CityEntry? _selectedCity;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _loadCities();
     // Refresh countdown every second for HH:MM:SS display.
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
   }
@@ -43,11 +42,6 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadCities() async {
-    final cities = await CitiesRepository.load();
-    if (mounted) setState(() => _cities = cities);
   }
 
   @override
@@ -66,7 +60,36 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
           textDirection: TextDirection.rtl,
           child: Scaffold(
             backgroundColor: bg,
-            body: BlocBuilder<PrayerCubit, PrayerState>(
+            body: BlocConsumer<PrayerCubit, PrayerState>(
+              listenWhen: (previous, current) {
+                if (current is PrayerError) return true;
+                if (current is! PrayerLoaded) return false;
+                if (current.noticeMessage == null || current.noticeMessage!.isEmpty) {
+                  return false;
+                }
+                final prevNoticeId = previous is PrayerLoaded ? previous.noticeId : -1;
+                return current.noticeId != prevNoticeId;
+              },
+              listener: (context, state) {
+                String? message;
+                int? noticeId;
+                if (state is PrayerError) {
+                  message = state.message;
+                } else if (state is PrayerLoaded && state.noticeMessage != null) {
+                  message = state.noticeMessage;
+                  noticeId = state.noticeId;
+                }
+                if (message != null && message.isNotEmpty) {
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+                    );
+                  if (noticeId != null && noticeId > 0) {
+                    context.read<PrayerCubit>().clearNotice(noticeId);
+                  }
+                }
+              },
               builder: (context, state) {
                 return CustomScrollView(
                   slivers: [
@@ -90,13 +113,34 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                         cardBg: cardBg,
                         textColor: textColor,
                         subColor: subColor,
-                        cities: _cities,
-                        selectedCity: _selectedCity,
-                        onCitySelected: (city) {
-                          setState(() => _selectedCity = city);
-                          context.read<PrayerCubit>().selectCity(city);
-                        },
+                        state: state,
                         onGPSTap: () => context.read<PrayerCubit>().requestGPS(),
+                        onOpenCalendar: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MultiBlocProvider(
+                              providers: [
+                                BlocProvider.value(value: context.read<AppSettingsCubit>()),
+                                BlocProvider.value(value: context.read<PrayerCubit>()),
+                              ],
+                              child: const PrayerCalendarPage(),
+                            ),
+                          ),
+                        ),
+                        onOpenAdjustments: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MultiBlocProvider(
+                              providers: [
+                                BlocProvider.value(value: context.read<AppSettingsCubit>()),
+                                BlocProvider.value(value: context.read<PrayerCubit>()),
+                              ],
+                              child: const PrayerAdjustmentsPage(),
+                            ),
+                          ),
+                        ),
+                        onPrevDay: () => context.read<PrayerCubit>().goToPreviousDay(),
+                        onNextDay: () => context.read<PrayerCubit>().goToNextDay(),
                       ),
                     ),
 
@@ -168,20 +212,22 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
     Color textColor,
     Color subColor,
   ) {
+    final isToday = _isSameDay(state.selectedDate, DateTime.now());
     final display = _buildCountdownDisplay(state, DateTime.now());
-    final highlightedPrayer = display.isIqama ? display.prayer : state.nextPrayer;
+    final highlightedPrayer =
+        isToday ? (display.isIqama ? display.prayer : state.nextPrayer) : null;
 
     final prayers = [
       _PrayerEntry('الفجر',   Prayer.fajr,    Icons.brightness_3_rounded, state.times.fajr),
       _PrayerEntry('الشروق',  Prayer.sunrise, Icons.wb_twilight_rounded,  state.times.sunrise),
-      _PrayerEntry('الظهر',   Prayer.dhuhr,   Icons.wb_sunny_rounded,     state.times.dhuhr),
+      _PrayerEntry(_dhuhrLabelForDate(state.selectedDate), Prayer.dhuhr, Icons.wb_sunny_rounded, state.times.dhuhr),
       _PrayerEntry('العصر',   Prayer.asr,     Icons.wb_cloudy_rounded,    state.times.asr),
       _PrayerEntry('المغرب',  Prayer.maghrib, Icons.nights_stay_rounded,  state.times.maghrib),
       _PrayerEntry('العشاء',  Prayer.isha,    Icons.dark_mode_rounded,    state.times.isha),
     ];
 
     return prayers.map((p) {
-      final isNext = highlightedPrayer == p.prayer;
+      final isNext = highlightedPrayer != null && highlightedPrayer == p.prayer;
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: _PrayerCard(
@@ -254,29 +300,43 @@ class _LocationControls extends StatelessWidget {
   final AppSettingsState settings;
   final bool isDark;
   final Color accent, cardBg, textColor, subColor;
-  final List<CityEntry> cities;
-  final CityEntry? selectedCity;
-  final ValueChanged<CityEntry> onCitySelected;
+  final PrayerState state;
   final VoidCallback onGPSTap;
+  final VoidCallback onOpenCalendar;
+  final VoidCallback onOpenAdjustments;
+  final VoidCallback onPrevDay;
+  final VoidCallback onNextDay;
 
   const _LocationControls({
-    required this.settings,   required this.isDark,
-    required this.accent,     required this.cardBg,
-    required this.textColor,  required this.subColor,
-    required this.cities,     required this.selectedCity,
-    required this.onCitySelected, required this.onGPSTap,
+    required this.settings,
+    required this.isDark,
+    required this.accent,
+    required this.cardBg,
+    required this.textColor,
+    required this.subColor,
+    required this.state,
+    required this.onGPSTap,
+    required this.onOpenCalendar,
+    required this.onOpenAdjustments,
+    required this.onPrevDay,
+    required this.onNextDay,
   });
 
   @override
   Widget build(BuildContext context) {
+    final selectedDate = state is PrayerLoaded
+        ? (state as PrayerLoaded).selectedDate
+        : DateTime.now();
+    final hijri = HijriCalendar.fromDate(selectedDate);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
       child: Row(
         children: [
-          // ── City Dropdown ────────────────────────────────
+          // ── Date navigation (replaces manual location dropdown) ─
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               decoration: BoxDecoration(
                 color: cardBg,
                 borderRadius: BorderRadius.circular(14),
@@ -288,50 +348,108 @@ class _LocationControls extends StatelessWidget {
                   ),
                 ],
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<CityEntry>(
-                  value: selectedCity,
-                  hint: Text('اختر مدينة',
-                      style: _font(settings, 13, subColor, FontWeight.normal)),
-                  isExpanded: true,
-                  dropdownColor: cardBg,
-                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: accent),
-                  items: cities.map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c.displayName,
-                        style: _font(settings, 13, textColor, FontWeight.normal),
-                        overflow: TextOverflow.ellipsis),
-                  )).toList(),
-                  onChanged: (c) { if (c != null) onCitySelected(c); },
-                ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: onPrevDay,
+                    icon: Icon(Icons.chevron_left_rounded, color: accent, size: 26),
+                    tooltip: 'اليوم السابق',
+                  ),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _weekdayName(selectedDate),
+                          style: _font(settings, 16, textColor, FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${hijri.hDay} ${_hijriMonthAr(hijri.hMonth)}',
+                          style: _font(settings, 13, accent, FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onNextDay,
+                    icon: Icon(Icons.chevron_right_rounded, color: accent, size: 26),
+                    tooltip: 'اليوم التالي',
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 10),
-          // ── GPS Button ──────────────────────────────────
-          GestureDetector(
-            onTap: onGPSTap,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+          // ── Quick actions: settings shortcut, calendar, GPS ─
+          Row(
+            children: [
+              _actionButton(
+                icon: Icons.tune_rounded,
+                onTap: onOpenAdjustments,
+                tooltip: 'تعديل الأذان والموقع اليدوي',
               ),
-              child: const Icon(Icons.my_location_rounded,
-                  color: ColorsManager.white, size: 22),
-            ),
+              const SizedBox(width: 8),
+              _actionButton(
+                icon: Icons.calendar_month_rounded,
+                onTap: onOpenCalendar,
+                tooltip: 'التقويم',
+              ),
+              const SizedBox(width: 8),
+              _actionButton(
+                icon: Icons.my_location_rounded,
+                onTap: onGPSTap,
+                tooltip: 'تحديد الموقع بدقة',
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+
+  Widget _actionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: ColorsManager.white, size: 20),
+        ),
+      ),
+    );
+  }
+
+  String _weekdayName(DateTime date) {
+    const names = [
+      'الاثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
+    return names[date.weekday - 1];
+  }
+
 }
 
 // ── Next Prayer Card ──────────────────────────────────────────────
@@ -349,19 +467,19 @@ class _NextPrayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now       = DateTime.now();
-    final display   = _buildCountdownDisplay(state, now);
-    final name      = _prayerName(display.prayer);
+    final now = DateTime.now();
+    final display = _buildCountdownDisplay(state, now);
+    final name = _prayerName(display.prayer, state.selectedDate);
 
     final iqamaLightStart = const Color(0xFFC87D24);
     final iqamaLightEnd   = const Color(0xFFE79B3C);
     final iqamaDarkStart  = const Color(0xFF7D4D14);
     final iqamaDarkEnd    = const Color(0xFFB06E1C);
 
-    final cardStart = display.isIqama
+    final cardStart = (display.isIqama && display.showCountdown)
         ? (isDark ? iqamaDarkStart : iqamaLightStart)
         : accentDark;
-    final cardEnd = display.isIqama
+    final cardEnd = (display.isIqama && display.showCountdown)
         ? (isDark ? iqamaDarkEnd : iqamaLightEnd)
         : accent;
 
@@ -391,7 +509,10 @@ class _NextPrayerCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(display.isIqama ? 'الصلاة الحالية' : 'الصلاة القادمة',
+                Text(
+                    !display.showCountdown
+                        ? 'مواقيت يوم ${_weekdayName(now, state.selectedDate)}'
+                        : (display.isIqama ? 'الصلاة الحالية' : 'الصلاة القادمة'),
                     style: _font(settings, 12,
                         ColorsManager.white.withValues(alpha: 0.80), FontWeight.normal)),
                 const SizedBox(height: 4),
@@ -410,7 +531,10 @@ class _NextPrayerCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(display.isIqama ? 'وقت الإقامة' : 'الوقت المتبقي',
+                Text(
+                    !display.showCountdown
+                        ? 'وقت الصلاة'
+                        : (display.isIqama ? 'وقت الإقامة' : 'الوقت المتبقي'),
                     style: _font(settings, 12,
                         ColorsManager.white.withValues(alpha: 0.80), FontWeight.normal)),
                 const SizedBox(height: 4),
@@ -429,17 +553,29 @@ class _CountdownDisplay {
   final Prayer prayer;
   final String text;
   final bool isIqama;
+  final bool showCountdown;
   const _CountdownDisplay({
     required this.prayer,
     required this.text,
     required this.isIqama,
+    required this.showCountdown,
   });
 }
 
 _CountdownDisplay _buildCountdownDisplay(PrayerLoaded state, DateTime now) {
+  if (!_isSameDay(state.selectedDate, now)) {
+    return _CountdownDisplay(
+      prayer: state.nextPrayer,
+      text: _formatTime(state.nextPrayerTime),
+      isIqama: false,
+      showCountdown: false,
+    );
+  }
+
   const iqamaWindow = Duration(minutes: 30);
   final schedule = <Prayer, DateTime>{
     Prayer.fajr: state.times.fajr,
+    Prayer.sunrise: state.times.sunrise,
     Prayer.dhuhr: state.times.dhuhr,
     Prayer.asr: state.times.asr,
     Prayer.maghrib: state.times.maghrib,
@@ -464,6 +600,7 @@ _CountdownDisplay _buildCountdownDisplay(PrayerLoaded state, DateTime now) {
         prayer: currentPrayer,
         text: _formatMmSs(elapsed),
         isIqama: true,
+        showCountdown: true,
       );
     }
   }
@@ -485,6 +622,7 @@ _CountdownDisplay _buildCountdownDisplay(PrayerLoaded state, DateTime now) {
       prayer: nextPrayer,
       text: _formatMmSs(Duration.zero),
       isIqama: true,
+      showCountdown: true,
     );
   }
 
@@ -492,6 +630,7 @@ _CountdownDisplay _buildCountdownDisplay(PrayerLoaded state, DateTime now) {
     prayer: nextPrayer,
     text: _formatHhMmSs(remaining),
     isIqama: false,
+    showCountdown: true,
   );
 }
 
@@ -681,16 +820,46 @@ String _formatMmSs(Duration d) {
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
-String _prayerName(Prayer p) {
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _weekdayName(DateTime now, DateTime selected) {
+  const names = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+  if (_isSameDay(now, selected)) return 'اليوم';
+  return names[selected.weekday - 1];
+}
+
+String _prayerName(Prayer p, DateTime selectedDate) {
   switch (p) {
     case Prayer.fajr:    return 'الفجر';
     case Prayer.sunrise: return 'الشروق';
-    case Prayer.dhuhr:   return 'الظهر';
+    case Prayer.dhuhr:   return _dhuhrLabelForDate(selectedDate);
     case Prayer.asr:     return 'العصر';
     case Prayer.maghrib: return 'المغرب';
     case Prayer.isha:    return 'العشاء';
     default:             return 'غير محدد';
   }
+}
+
+String _dhuhrLabelForDate(DateTime date) =>
+    date.weekday == DateTime.friday ? 'الجمعة' : 'الظهر';
+
+String _hijriMonthAr(int month) {
+  const months = [
+    'محرم',
+    'صفر',
+    'ربيع الأول',
+    'ربيع الآخر',
+    'جمادى الأولى',
+    'جمادى الآخرة',
+    'رجب',
+    'شعبان',
+    'رمضان',
+    'شوال',
+    'ذو القعدة',
+    'ذو الحجة',
+  ];
+  return months[month - 1];
 }
 
 IconData _prayerIcon(Prayer p) {

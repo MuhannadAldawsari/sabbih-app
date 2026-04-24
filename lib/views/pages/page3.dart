@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:lottie/lottie.dart' hide Marker;
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/features/qibla/qibla_cubit.dart';
@@ -81,10 +82,43 @@ class _QiblaViewState extends State<_QiblaView> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<PrayerCubit, PrayerState>(
+      listenWhen: (previous, current) {
+        if (current is PrayerLoaded) {
+          // Always react when location changes for QiblaCubit linking.
+          if (previous is! PrayerLoaded) return true;
+          if (current.lat != previous.lat || current.lng != previous.lng) return true;
+          // React to new notice messages.
+          if (current.noticeMessage != null && current.noticeMessage!.isNotEmpty) {
+            final prevNoticeId = previous.noticeId;
+            return current.noticeId != prevNoticeId;
+          }
+          return false;
+        }
+        return current is PrayerError;
+      },
       listener: (context, prayerState) {
         if (prayerState is PrayerLoaded) {
           _locationLinked = true;
           context.read<QiblaCubit>().start(prayerState.lat, prayerState.lng);
+          if (widget.isActive) {
+            final notice = prayerState.noticeMessage;
+            if (notice != null && notice.isNotEmpty) {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(content: Text(notice), behavior: SnackBarBehavior.floating),
+                );
+              if (prayerState.noticeId > 0) {
+                context.read<PrayerCubit>().clearNotice(prayerState.noticeId);
+              }
+            }
+          }
+        } else if (prayerState is PrayerError && widget.isActive) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(content: Text(prayerState.message), behavior: SnackBarBehavior.floating),
+            );
         }
       },
       child: BlocBuilder<AppSettingsCubit, AppSettingsState>(
@@ -122,7 +156,7 @@ class _QiblaViewState extends State<_QiblaView> {
                       else ...[
                         // Mode toggle
                         SliverToBoxAdapter(
-                          child: _ModeToggle(
+                          child: _ModeControls(
                             showMap: _showMap,
                             onToggle: () => setState(() => _showMap = !_showMap),
                             settings: settings,
@@ -130,11 +164,7 @@ class _QiblaViewState extends State<_QiblaView> {
                             accent: accent,
                           ),
                         ),
-                        // Calibration warning (above compass)
-                        if (!_showMap && qiblaState.needsCalibration)
-                          SliverToBoxAdapter(
-                            child: _CalibrationWarning(settings: settings, isDark: isDark),
-                          ),
+                        // Calibration warning (above compass) — hidden
                         // Compass or Map
                         if (_showMap)
                           SliverToBoxAdapter(
@@ -231,14 +261,14 @@ class _Header extends StatelessWidget {
 
 // ── Mode Toggle ───────────────────────────────────────────────────
 
-class _ModeToggle extends StatelessWidget {
+class _ModeControls extends StatelessWidget {
   final bool showMap;
   final VoidCallback onToggle;
   final AppSettingsState settings;
   final bool isDark;
   final Color accent;
 
-  const _ModeToggle({
+  const _ModeControls({
     required this.showMap,
     required this.onToggle,
     required this.settings,
@@ -342,25 +372,6 @@ class _ToggleButton extends StatelessWidget {
   }
 }
 
-// ── Calibration Warning ───────────────────────────────────────────
-
-class _CalibrationWarning extends StatelessWidget {
-  final AppSettingsState settings;
-  final bool isDark;
-  const _CalibrationWarning({required this.settings, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return _WarningBanner(
-      icon: Icons.warning_amber_rounded,
-      color: const Color(0xFFF9A825),
-      text: 'دقة البوصلة منخفضة. حرّك الهاتف على شكل رقم 8 لمعايرتها.',
-      settings: settings,
-      isDark: isDark,
-    );
-  }
-}
-
 // ── Tilt Warning ──────────────────────────────────────────────────
 
 class _TiltWarning extends StatelessWidget {
@@ -446,6 +457,13 @@ class _CompassView extends StatelessWidget {
 
     final heading = qiblaState.deviceHeading;
     final rotationTurns = qiblaState.qiblaRotationTurns;
+    final isQiblaAligned = _isWithinOneDegree(
+      heading: heading,
+      qiblaAngle: qiblaState.qiblaAngle,
+    );
+    final kaabaAsset = isDark
+        ? (isQiblaAligned ? 'assets/images/kaaba4.png' : 'assets/images/kaaba3.png')
+        : (isQiblaAligned ? 'assets/images/kaaba2.png' : 'assets/images/kaaba1.png');
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -458,9 +476,13 @@ class _CompassView extends StatelessWidget {
               style: _font(settings, 48, textColor, FontWeight.bold),
             ),
           const SizedBox(height: 4),
-          Text(
-            heading != null ? _headingDirection(heading) : 'في انتظار البوصلة...',
-            style: _font(settings, 14, subColor, FontWeight.w500),
+          SizedBox(
+            width: 56,
+            height: 56,
+            child: Image.asset(
+              kaabaAsset,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -568,13 +590,11 @@ class _CompassView extends StatelessWidget {
                   height: 36,
                   color: isDark ? ColorsManager.darkDivider : ColorsManager.lightDivider,
                 ),
-                _InfoItem(
-                  label: 'اتجاه الهاتف',
-                  value: heading != null ? '${heading.toStringAsFixed(0)}°' : '--',
+                _CalibrationStatusItem(
+                  qiblaState: qiblaState,
                   settings: settings,
-                  textColor: textColor,
                   subColor: subColor,
-                  accent: accent,
+                  onCalibrateTap: () => _showCalibrationSheet(context, qiblaState, settings, isDark, accent),
                 ),
               ],
             ),
@@ -584,10 +604,35 @@ class _CompassView extends StatelessWidget {
     );
   }
 
-  String _headingDirection(double heading) {
-    const directions = ['شمال', 'شمال شرق', 'شرق', 'جنوب شرق', 'جنوب', 'جنوب غرب', 'غرب', 'شمال غرب'];
-    final index = ((heading + 22.5) % 360 / 45).floor();
-    return directions[index];
+  bool _isWithinOneDegree({required double? heading, required double? qiblaAngle}) {
+    if (heading == null || qiblaAngle == null) return false;
+    final headingDeg = ((heading % 360) + 360) % 360;
+    final qiblaDeg = ((qiblaAngle % 360) + 360) % 360;
+    final delta = (headingDeg - qiblaDeg).abs();
+    final circularDelta = delta > 180 ? 360 - delta : delta;
+    return circularDelta <= 1;
+  }
+
+  void _showCalibrationSheet(
+    BuildContext context,
+    QiblaState qiblaState,
+    AppSettingsState settings,
+    bool isDark,
+    Color accent,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BlocProvider.value(
+        value: context.read<QiblaCubit>(),
+        child: _CalibrationBottomSheet(
+          settings: settings,
+          isDark: isDark,
+          accent: accent,
+        ),
+      ),
+    );
   }
 }
 
@@ -613,6 +658,263 @@ class _InfoItem extends StatelessWidget {
         const SizedBox(height: 2),
         Text(label, style: _font(settings, 12, subColor, FontWeight.normal)),
       ],
+    );
+  }
+}
+
+// ── Calibration Status Item ───────────────────────────────────────
+
+class _CalibrationStatusItem extends StatelessWidget {
+  final QiblaState qiblaState;
+  final AppSettingsState settings;
+  final Color subColor;
+  final VoidCallback onCalibrateTap;
+
+  const _CalibrationStatusItem({
+    required this.qiblaState,
+    required this.settings,
+    required this.subColor,
+    required this.onCalibrateTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final needsCal = qiblaState.needsCalibration;
+    final statusColor = needsCal ? Colors.red : Colors.green;
+    final statusText = needsCal ? 'يحتاج معايرة' : 'حساس البوصلة: جيد';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              statusText,
+              style: _font(settings, 12, statusColor, FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: onCalibrateTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: statusColor.withValues(alpha: 0.6)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'معايرة',
+              style: _font(settings, 11, statusColor, FontWeight.w500),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Calibration Bottom Sheet ──────────────────────────────────────
+
+class _CalibrationBottomSheet extends StatefulWidget {
+  final AppSettingsState settings;
+  final bool isDark;
+  final Color accent;
+
+  const _CalibrationBottomSheet({
+    required this.settings,
+    required this.isDark,
+    required this.accent,
+  });
+
+  @override
+  State<_CalibrationBottomSheet> createState() => _CalibrationBottomSheetState();
+}
+
+class _CalibrationBottomSheetState extends State<_CalibrationBottomSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final settings = widget.settings;
+    final bg = isDark ? ColorsManager.darkCard : ColorsManager.lightCard;
+    final textColor = isDark ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary;
+    final subColor = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
+
+    return BlocConsumer<QiblaCubit, QiblaState>(
+      listenWhen: (prev, curr) =>
+          prev.needsCalibration != curr.needsCalibration,
+      listener: (context, state) {
+        // TODO: re-enable auto-close after testing
+        // if (!state.needsCalibration) {
+        //   Future.delayed(const Duration(milliseconds: 800), () {
+        //     if (mounted) Navigator.of(context).pop();
+        //   });
+        // }
+      },
+      builder: (context, state) {
+        final strength = state.magneticFieldStrength;
+        final isGood = !state.needsCalibration;
+        final statusColor = isGood ? Colors.green : Colors.red;
+        final statusLabel = isGood ? 'جيدة' : 'ضعيفة - تحتاج معايرة';
+
+        return Container(
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            20,
+            24,
+            24 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: subColor.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Title
+              Text(
+                'معايرة البوصلة',
+                style: _font(settings, 20, textColor, FontWeight.bold),
+                textDirection: TextDirection.rtl,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 150,
+                child: Lottie.asset(
+                  'assets/animations/Callibration_GPS.json',
+                  repeat: true,
+                  animate: true,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Center(
+                      child: Icon(
+                        Icons.screen_rotation_alt_rounded,
+                        size: 52,
+                        color: widget.accent,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Figure-8 instruction
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: widget.accent, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'حرّك هاتفك بشكل رقم 8 في الهواء حتى تتحسن دقة البوصلة',
+                        style: _font(settings, 13, textColor, FontWeight.normal),
+                        textDirection: TextDirection.rtl,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Live µT reading
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          statusLabel,
+                          style: _font(settings, 14, statusColor, FontWeight.w600),
+                          textDirection: TextDirection.rtl,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      strength != null
+                          ? '${strength.toStringAsFixed(1)} µT'
+                          : '--',
+                      style: _font(settings, 28, statusColor, FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'النطاق الطبيعي: 20 – 65 µT',
+                      style: _font(settings, 11, subColor, FontWeight.normal),
+                      textDirection: TextDirection.rtl,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Close button
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: subColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    'إغلاق',
+                    style: _font(settings, 14, subColor, FontWeight.w500),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

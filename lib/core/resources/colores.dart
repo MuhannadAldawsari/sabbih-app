@@ -12,7 +12,7 @@ abstract class ColorsManager {
   static const Color lightCardAlt   = Color(0xFFF7F0E8); // slightly tinted card alt
 
   // ── Dark Mode ────────────────────────────────────────────────
-  static const Color darkBg         = Color(0xFF0E1015); // near-black background like design reference
+  static const Color darkBg         = Color(0xFF000000); // near-black background like design reference
   static const Color darkCard       = Color(0xFF161B24); // deep blue-black card close to reference
   static const Color darkAccent     = Color(0xFF4CAF6E); // bright green accent
   static const Color darkNavBar     = Color(0xFF151A22); // nav bar tuned to match dark background

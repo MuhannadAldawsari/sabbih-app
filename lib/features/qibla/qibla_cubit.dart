@@ -17,6 +17,7 @@ class QiblaState {
   final double? lng;
   final String? errorMessage;
   final bool isLoading;
+  final double? magneticFieldStrength; // µT
 
   const QiblaState({
     this.qiblaAngle,
@@ -28,6 +29,7 @@ class QiblaState {
     this.lng,
     this.errorMessage,
     this.isLoading = false,
+    this.magneticFieldStrength,
   });
 
   bool get hasLocation => lat != null && lng != null;
@@ -50,6 +52,7 @@ class QiblaState {
     String? errorMessage,
     bool? isLoading,
     bool clearError = false,
+    double? magneticFieldStrength,
   }) {
     return QiblaState(
       qiblaAngle: qiblaAngle ?? this.qiblaAngle,
@@ -61,6 +64,7 @@ class QiblaState {
       lng: lng ?? this.lng,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isLoading: isLoading ?? this.isLoading,
+      magneticFieldStrength: magneticFieldStrength ?? this.magneticFieldStrength,
     );
   }
 }
@@ -72,8 +76,13 @@ class QiblaCubit extends Cubit<QiblaState> {
 
   StreamSubscription<CompassEvent>? _compassSub;
   StreamSubscription<AccelerometerEvent>? _accelSub;
+  StreamSubscription<MagnetometerEvent>? _magSub;
 
   static const double _tiltThreshold = 3.0; // m/s² deviation from gravity
+
+  // Moving average buffer for magnetometer smoothing
+  static const int _magWindowSize = 4;
+  final List<double> _magBuffer = [];
 
   /// Start compass and tilt detection once location is known.
   void start(double lat, double lng) {
@@ -88,6 +97,7 @@ class QiblaCubit extends Cubit<QiblaState> {
 
     _startCompass();
     _startTiltDetection();
+    _startMagnetometer();
   }
 
   void _startCompass() {
@@ -102,12 +112,13 @@ class QiblaCubit extends Cubit<QiblaState> {
         final heading = (rawHeading % 360 + 360) % 360;
 
         final accuracy = event.accuracy;
-        final needsCal = accuracy != null && accuracy < 15;
-
+        // Combine compass accuracy signal with existing magnetometer signal
+        final compassNeedsCal = accuracy != null && accuracy < 15;
+        final magNeedsCal = _magnetometerNeedsCalibration(state.magneticFieldStrength);
         emit(state.copyWith(
           deviceHeading: heading,
           headingAccuracy: accuracy,
-          needsCalibration: needsCal,
+          needsCalibration: compassNeedsCal || magNeedsCal,
         ));
       },
       onError: (e) {
@@ -115,6 +126,39 @@ class QiblaCubit extends Cubit<QiblaState> {
         emit(state.copyWith(errorMessage: 'البوصلة غير متوفرة على هذا الجهاز'));
       },
     );
+  }
+
+  void _startMagnetometer() {
+    _magSub?.cancel();
+    _magSub = magnetometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 500),
+    ).listen(
+      (event) {
+        if (isClosed) return;
+        final raw = sqrt(
+          event.x * event.x + event.y * event.y + event.z * event.z,
+        );
+
+        // Moving average: keep last _magWindowSize readings
+        _magBuffer.add(raw);
+        if (_magBuffer.length > _magWindowSize) _magBuffer.removeAt(0);
+        final smoothed = _magBuffer.reduce((a, b) => a + b) / _magBuffer.length;
+
+        final magNeedsCal = _magnetometerNeedsCalibration(smoothed);
+        final compassNeedsCal =
+            state.headingAccuracy != null && state.headingAccuracy! < 15;
+        emit(state.copyWith(
+          magneticFieldStrength: smoothed,
+          needsCalibration: magNeedsCal || compassNeedsCal,
+        ));
+      },
+      onError: (_) {},
+    );
+  }
+
+  static bool _magnetometerNeedsCalibration(double? strength) {
+    if (strength == null) return false;
+    return strength < 20 || strength > 65;
   }
 
   void _startTiltDetection() {
@@ -140,6 +184,7 @@ class QiblaCubit extends Cubit<QiblaState> {
   Future<void> close() {
     _compassSub?.cancel();
     _accelSub?.cancel();
+    _magSub?.cancel();
     return super.close();
   }
 }

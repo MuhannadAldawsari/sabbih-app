@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/iqama_notification/iqama_countdown_logic.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
@@ -125,12 +126,89 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                   textAlign: TextAlign.right,
                   style: _font(settings, 12, subColor, FontWeight.normal),
                 ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: !settings.iqamaNotifEnabled
+                      ? const SizedBox.shrink()
+                      : Column(
+                          key: const ValueKey('battery-section'),
+                          children: [
+                            const SizedBox(height: 18),
+                            _card(
+                              cardBg: cardBg,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      'لضمان عمل إشعارات الأذان والإقامة بشكل أكثر ثباتًا، يُنصح بإلغاء قيود البطارية للتطبيق.',
+                                      textAlign: TextAlign.right,
+                                      style: _font(settings, 12, subColor, FontWeight.normal),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    ElevatedButton.icon(
+                                      onPressed: () => _requestBatteryOptimizationExemption(context),
+                                      icon: const Icon(Icons.battery_saver_rounded),
+                                      label: Text(
+                                        'إلغاء قيود البطارية',
+                                        style: _font(settings, 13, ColorsManager.white, FontWeight.w600),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: accent,
+                                        foregroundColor: ColorsManager.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _requestBatteryOptimizationExemption(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final isAlreadyGranted = await Permission.ignoreBatteryOptimizations.isGranted;
+
+    if (isAlreadyGranted) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('قيود البطارية ملغاة بالفعل.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+
+    await Permission.ignoreBatteryOptimizations.request();
+    final isGrantedAfterRequest = await Permission.ignoreBatteryOptimizations.isGranted;
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            isGrantedAfterRequest
+                ? 'تم إلغاء قيود البطارية بنجاح.'
+                : 'ما زالت قيود البطارية مفعلة. يمكنك إلغاء القيود من إعدادات النظام.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   Widget _card({required Color cardBg, required Widget child}) {
