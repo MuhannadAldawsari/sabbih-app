@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
@@ -18,10 +19,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   bool _notificationsEnabled = true;
   bool _morningEnabled = true;
   bool _eveningEnabled = true;
-  bool _sleepEnabled = false;
   TimeOfDay _morningTime = const TimeOfDay(hour: 5, minute: 0);
   TimeOfDay _eveningTime = const TimeOfDay(hour: 16, minute: 0);
-  TimeOfDay _sleepTime   = const TimeOfDay(hour: 22, minute: 30);
 
   @override
   void initState() {
@@ -116,7 +115,15 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                           textColor: textColor,
                           subColor: subColor,
                           onTap: () async {
-                            final t = await showTimePicker(context: context, initialTime: _morningTime);
+                            final t = await _pickReminderTime(
+                              context,
+                              isMorning: true,
+                              initial: _morningTime,
+                              settings: settings,
+                              textColor: textColor,
+                              subColor: subColor,
+                              accent: accent,
+                            );
                             if (t != null) setState(() => _morningTime = t);
                           },
                         ),
@@ -154,46 +161,16 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                           textColor: textColor,
                           subColor: subColor,
                           onTap: () async {
-                            final t = await showTimePicker(context: context, initialTime: _eveningTime);
+                            final t = await _pickReminderTime(
+                              context,
+                              isMorning: false,
+                              initial: _eveningTime,
+                              settings: settings,
+                              textColor: textColor,
+                              subColor: subColor,
+                              accent: accent,
+                            );
                             if (t != null) setState(() => _eveningTime = t);
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Sleep ──────────────────────────────────────
-                _sectionLabel('أذكار النوم', settings, subColor),
-                const SizedBox(height: 8),
-                _card(
-                  cardBg: cardBg,
-                  child: Column(
-                    children: [
-                      _toggleRow(
-                        icon: Icons.bedtime_outlined,
-                        accent: accent,
-                        title: 'تنبيه النوم',
-                        subtitle: 'ذكّرني بأذكار النوم',
-                        value: _sleepEnabled,
-                        settings: settings,
-                        textColor: textColor,
-                        subColor: subColor,
-                        onChanged: (v) => setState(() => _sleepEnabled = v),
-                      ),
-                      if (_sleepEnabled) ...[
-                        Divider(color: divider, height: 1),
-                        _timePicker(
-                          label: 'وقت التنبيه',
-                          time: _sleepTime,
-                          accent: accent,
-                          settings: settings,
-                          textColor: textColor,
-                          subColor: subColor,
-                          onTap: () async {
-                            final t = await showTimePicker(context: context, initialTime: _sleepTime);
-                            if (t != null) setState(() => _sleepTime = t);
                           },
                         ),
                       ],
@@ -203,6 +180,114 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               ],
               const SizedBox(height: 100),
               ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _isSameCalendarDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// أوقات المرجع تُؤخذ من [PrayerLoaded] لنفس **يوم التقويم المعروض** في صفحة المواقيت.
+  /// إن كان ذلك اليوم ليس «اليوم» الحالي لا نعرض أرقاماً لتجنب الالتباس.
+  Future<TimeOfDay?> _pickReminderTime(
+    BuildContext context, {
+    required bool isMorning,
+    required TimeOfDay initial,
+    required AppSettingsState settings,
+    required Color textColor,
+    required Color subColor,
+    required Color accent,
+  }) async {
+    final guidance = isMorning
+        ? 'وقت قراءة أذكار الصباح يبدأ بعد أذان الفجر .'
+        : 'وقت قراءة أذكار المساء يبدأ بعد صلاة العصر .';
+
+    final prayerState = context.read<PrayerCubit>().state;
+    late final String anchorLine;
+    if (prayerState is PrayerLoaded) {
+      final now = DateTime.now();
+      final sameAsToday = _isSameCalendarDay(prayerState.selectedDate, now);
+      final loc = MaterialLocalizations.of(context);
+      if (sameAsToday) {
+        final anchor = isMorning
+            ? prayerState.times.fajr
+            : prayerState.times.asr.add(const Duration(minutes: 20));
+        final tod = TimeOfDay.fromDateTime(anchor);
+        anchorLine = 'وقت مرجعي مُقترح لهذا اليوم: ${loc.formatTimeOfDay(tod)}';
+      } else {
+        anchorLine =
+            'المواقيت في التطبيق تعرض يوماً آخر؛ افتح صفحة المواقيت واختر اليوم الحالي لعرض وقت مرجعي محسوب هنا.';
+      }
+    } else {
+      anchorLine =
+          'فعّل الموقع أو اختر المدينة من صفحة المواقيت لعرض وقت مرجعي من مواقيت الصلاة.';
+    }
+
+    return showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (dialogContext, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Theme(
+            data: Theme.of(context),
+            child: MediaQuery(
+              data: MediaQuery.of(dialogContext),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            guidance,
+                            textAlign: TextAlign.right,
+                            style: _font(settings, 13, subColor, FontWeight.w500),
+                          ),
+                          const SizedBox(height: 10),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Row(
+                                textDirection: TextDirection.rtl,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: accent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      anchorLine,
+                                      textAlign: TextAlign.right,
+                                      style: _font(settings, 13, textColor, FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (child != null) child,
+                  ],
+                ),
+              ),
             ),
           ),
         );

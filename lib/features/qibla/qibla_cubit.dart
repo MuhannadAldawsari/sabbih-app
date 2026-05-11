@@ -158,7 +158,7 @@ class QiblaCubit extends Cubit<QiblaState> {
 
   static bool _magnetometerNeedsCalibration(double? strength) {
     if (strength == null) return false;
-    return strength < 20 || strength > 65;
+    return strength < 20 || strength > 50;
   }
 
   void _startTiltDetection() {

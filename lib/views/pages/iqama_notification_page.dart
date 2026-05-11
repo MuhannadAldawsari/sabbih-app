@@ -22,6 +22,7 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(IqamaNotificationService.instance.ensureAndroidNotificationPermission());
+      unawaited(IqamaNotificationService.instance.ensureExactAlarmPermission());
     });
   }
 
@@ -68,10 +69,12 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                     subColor: subColor,
                     value: settings.iqamaNotifEnabled,
                     onChanged: (value) async {
+                      final messenger = ScaffoldMessenger.of(context);
                       final settingsCubit = context.read<AppSettingsCubit>();
                       final currentMode = settingsCubit.state.iqamaNotifMode;
                       if (value) {
                         await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
+                        await _ensureExactAlarmAccess(messenger);
                       }
                       await IqamaNotificationService.instance.applySettings(
                         enabled: value,
@@ -99,10 +102,12 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                                   activeColor: accent,
                                   onChanged: (value) async {
                                     if (value == null) return;
+                                    final messenger = ScaffoldMessenger.of(context);
                                     final settingsCubit = context.read<AppSettingsCubit>();
                                     final enabled = settingsCubit.state.iqamaNotifEnabled;
                                     if (enabled) {
                                       await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
+                                      await _ensureExactAlarmAccess(messenger);
                                     }
                                     await IqamaNotificationService.instance.applySettings(
                                       enabled: enabled,
@@ -207,6 +212,38 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                 : 'ما زالت قيود البطارية مفعلة. يمكنك إلغاء القيود من إعدادات النظام.',
           ),
           behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Future<void> _ensureExactAlarmAccess(ScaffoldMessengerState messenger) async {
+    final exactAllowed = await IqamaNotificationService.instance.ensureExactAlarmPermission(
+      requestIfNeeded: true,
+    );
+    if (exactAllowed) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('تم تفعيل المنبهات الدقيقة بنجاح.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      return;
+    }
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text(
+            'المنبهات الدقيقة غير مفعلة. يرجى تفعيل Alarms & reminders من إعدادات التطبيق لتحسين موثوقية إشعارات الأذان.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'فتح الإعدادات',
+            onPressed: openAppSettings,
+          ),
         ),
       );
   }

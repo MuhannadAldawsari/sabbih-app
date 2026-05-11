@@ -77,6 +77,7 @@ flutter:
 
   assets:
     - assets/cities.json
+    - assets/adhkar.json
     - assets/images/
     - assets/animations/
 

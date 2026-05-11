@@ -32,6 +32,7 @@ const _kMidnightAlarmId = 3000;
 const _kAlarmRevision = 'iqama_alarm_revision';
 const _kIqamaNotifModeSchemaV2 = 'iqama_notif_mode_schema_v2';
 const _kLegacyIqamaNotifModeCamel = 'iqamaNotifMode';
+const _kExactAlarmBlocked = 'iqama_exact_alarm_blocked';
 
 class IqamaNotificationService {
   IqamaNotificationService._();
@@ -64,6 +65,34 @@ class IqamaNotificationService {
     await Permission.notification.request();
   }
 
+  Future<bool> ensureExactAlarmPermission({bool requestIfNeeded = false}) async {
+    if (!Platform.isAndroid) return true;
+    final prefs = SharedPrefsHelper();
+    final status = await Permission.scheduleExactAlarm.status;
+    if (status.isGranted) {
+      await prefs.setBool(_kExactAlarmBlocked, false);
+      return true;
+    }
+
+    debugPrint(
+      'IqamaNotificationService: exact alarms are not allowed; notifications may be delayed until user unlocks device.',
+    );
+    if (requestIfNeeded) {
+      await Permission.scheduleExactAlarm.request();
+      final afterRequest = await Permission.scheduleExactAlarm.status;
+      if (afterRequest.isGranted) {
+        await prefs.setBool(_kExactAlarmBlocked, false);
+        return true;
+      }
+    }
+    await prefs.setBool(_kExactAlarmBlocked, true);
+    return false;
+  }
+
+  Future<bool> isExactAlarmPermissionBlocked() async {
+    return await SharedPrefsHelper().getBool(_kExactAlarmBlocked) ?? false;
+  }
+
   Future<void> init() async {
     if (!Platform.isAndroid) return;
 
@@ -92,6 +121,8 @@ class IqamaNotificationService {
     final prefs = SharedPrefsHelper();
     final enabled = await prefs.getBool(_kIqamaNotifEnabled) ?? false;
     if (!enabled) return;
+    final exactAllowed = await ensureExactAlarmPermission();
+    if (!exactAllowed) return;
     final mode = await _getMode();
     await _scheduleWindowModeAlarms(mode);
   }
@@ -119,6 +150,8 @@ class IqamaNotificationService {
     ]);
     final enabled = await prefs.getBool(_kIqamaNotifEnabled) ?? false;
     if (!enabled) return;
+    final exactAllowed = await ensureExactAlarmPermission();
+    if (!exactAllowed) return;
 
     final mode = await _getMode();
     await _scheduleWindowModeAlarms(mode);
@@ -137,6 +170,14 @@ class IqamaNotificationService {
     ]);
 
     if (enabled) {
+      final exactAllowed = await ensureExactAlarmPermission();
+      if (!exactAllowed) {
+        await _bumpAlarmRevision();
+        await _cancelAllWindowAlarms();
+        await AndroidAlarmManager.cancel(_kMidnightAlarmId);
+        await stop();
+        return;
+      }
       await _scheduleWindowModeAlarms(mode);
     } else {
       await _bumpAlarmRevision();
@@ -220,6 +261,7 @@ class IqamaNotificationService {
       colorized: true,
       color: background,
       category: AndroidNotificationCategory.service,
+      visibility: NotificationVisibility.public,
       additionalFlags: Int32List.fromList(const [_kAndroidNotificationFlagNoClear]),
       timeoutAfter: timeoutAfterMs,
     );
@@ -446,7 +488,7 @@ _NotificationContent _buildNotificationContent({
   final place = _notificationPlaceLine(location);
   final hijri = _notificationHijriLine();
   final timeStr = _formatAdhanWallClock(adhanLocalTime);
-  final title = 'صلاة $prayerName';
+  final title = prayerName == 'الشروق' ? prayerName : 'صلاة $prayerName';
   final body = hijri.isEmpty ? timeStr : '$hijri   |   $timeStr';
   final bigText = '$title\n$body\n$place';
   return _NotificationContent(

@@ -882,7 +882,7 @@ class _CalibrationBottomSheetState extends State<_CalibrationBottomSheet> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'النطاق الطبيعي: 20 – 65 µT',
+                      'النطاق الطبيعي: 20 – 50 µT',
                       style: _font(settings, 11, subColor, FontWeight.normal),
                       textDirection: TextDirection.rtl,
                     ),
