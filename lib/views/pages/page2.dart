@@ -2,13 +2,12 @@ import 'dart:async';
 import 'package:adhan/adhan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
-import 'package:sabbh/views/pages/prayer_adjustments_page.dart';
 import 'package:sabbh/views/pages/prayer_calendar_page.dart';
+import 'package:sabbh/core/utils/stiff_bouncing_scroll_physics.dart';
 
 class Page2 extends StatelessWidget {
   const Page2({super.key});
@@ -51,7 +50,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
         final isDark    = settings.isDarkMode;
         final bg        = isDark ? ColorsManager.darkBg    : ColorsManager.lightBg;
         final accent    = isDark ? ColorsManager.darkAccent: ColorsManager.lightAccent;
-        final accentDark= isDark ? const Color(0xFF0D2E15) : const Color(0xFF2C5F3A);
+        final accentDark= const Color(0xFF2C5F3A);
         final cardBg    = isDark ? ColorsManager.darkCard  : ColorsManager.lightCard;
         final textColor = isDark ? ColorsManager.darkTextPrimary   : ColorsManager.lightTextPrimary;
         final subColor  = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
@@ -60,6 +59,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
           textDirection: TextDirection.rtl,
           child: Scaffold(
             backgroundColor: bg,
+            extendBodyBehindAppBar: true,
             body: BlocConsumer<PrayerCubit, PrayerState>(
               listenWhen: (previous, current) {
                 if (current is PrayerError) return true;
@@ -92,6 +92,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
               },
               builder: (context, state) {
                 return CustomScrollView(
+                  physics: const StiffBouncingScrollPhysics(),
                   slivers: [
                     // ── Header ─────────────────────────────
                     SliverToBoxAdapter(
@@ -103,7 +104,6 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                         state: state,
                       ),
                     ),
-
                     // ── Location Controls ───────────────────
                     SliverToBoxAdapter(
                       child: _LocationControls(
@@ -124,18 +124,6 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                                 BlocProvider.value(value: context.read<PrayerCubit>()),
                               ],
                               child: const PrayerCalendarPage(),
-                            ),
-                          ),
-                        ),
-                        onOpenAdjustments: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MultiBlocProvider(
-                              providers: [
-                                BlocProvider.value(value: context.read<AppSettingsCubit>()),
-                                BlocProvider.value(value: context.read<PrayerCubit>()),
-                              ],
-                              child: const PrayerAdjustmentsPage(),
                             ),
                           ),
                         ),
@@ -174,7 +162,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                       ),
                       // All 5 prayer times
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 160),
                         sliver: SliverList(
                           delegate: SliverChildListDelegate(
                             _buildPrayerCards(
@@ -195,7 +183,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                       ),
                   ],
                 );
-              },
+        },
             ),
           ),
         );
@@ -266,30 +254,43 @@ class _Header extends StatelessWidget {
         ? (state as PrayerLoaded).locationName
         : 'مواقيت الصلاة';
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, topPad + 20, 20, 28),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accentDark, accent],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomCenter,
+      children: [
+        Positioned(
+          top: -1000,
+          left: 0,
+          right: 0,
+          bottom: 50,
+          child: Container(color: accentDark),
         ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft:  Radius.circular(22),
-          bottomRight: Radius.circular(22),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 15),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [accentDark, accent],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            borderRadius: const BorderRadius.only(
+              bottomLeft:  Radius.circular(22),
+              bottomRight: Radius.circular(22),
+            ),
+          ),
+          child: Column(
+            children: [
+              Text('مواقيت الصلاة',
+                  style: _font(settings, 22, ColorsManager.white, FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(locationName,
+                  style: _font(settings, 14,
+                      ColorsManager.white.withValues(alpha: 0.85), FontWeight.w500)),
+            ],
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Text('مواقيت الصلاة',
-              style: _font(settings, 28, ColorsManager.white, FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(locationName,
-              style: _font(settings, 14,
-                  ColorsManager.white.withValues(alpha: 0.85), FontWeight.w500)),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -303,7 +304,6 @@ class _LocationControls extends StatelessWidget {
   final PrayerState state;
   final VoidCallback onGPSTap;
   final VoidCallback onOpenCalendar;
-  final VoidCallback onOpenAdjustments;
   final VoidCallback onPrevDay;
   final VoidCallback onNextDay;
 
@@ -317,7 +317,6 @@ class _LocationControls extends StatelessWidget {
     required this.state,
     required this.onGPSTap,
     required this.onOpenCalendar,
-    required this.onOpenAdjustments,
     required this.onPrevDay,
     required this.onNextDay,
   });
@@ -386,15 +385,11 @@ class _LocationControls extends StatelessWidget {
           Row(
             children: [
               _actionButton(
-                icon: Icons.tune_rounded,
-                onTap: onOpenAdjustments,
-                tooltip: 'تعديل الأذان والموقع اليدوي',
-              ),
-              const SizedBox(width: 8),
-              _actionButton(
                 icon: Icons.calendar_month_rounded,
                 onTap: onOpenCalendar,
                 tooltip: 'التقويم',
+                label: 'التقويم',
+                settings: settings,
               ),
               const SizedBox(width: 8),
               _actionButton(
@@ -413,13 +408,15 @@ class _LocationControls extends StatelessWidget {
     required IconData icon,
     required VoidCallback onTap,
     required String tooltip,
+    String? label,
+    AppSettingsState? settings,
   }) {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.symmetric(horizontal: label != null ? 16 : 12, vertical: 12),
           decoration: BoxDecoration(
             color: accent,
             borderRadius: BorderRadius.circular(14),
@@ -431,7 +428,19 @@ class _LocationControls extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(icon, color: ColorsManager.white, size: 20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: ColorsManager.white, size: 20),
+              if (label != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: _font(settings!, 14, ColorsManager.white, FontWeight.bold),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -747,7 +756,7 @@ class _EmptyState extends StatelessWidget {
                 style: _font(settings, 18, textColor, FontWeight.bold),
                 textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Text('استخدم زر GPS تلقائياً، أو اختر مدينتك من القائمة',
+            Text('استخدم زر GPS لتحديد موقعك تلقائياً، أو اختر مدينتك من القائمة في الاعدادات',
                 style: _font(settings, 14, subColor, FontWeight.normal),
                 textAlign: TextAlign.center),
           ],
@@ -877,8 +886,8 @@ IconData _prayerIcon(Prayer p) {
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight);
   }
 }

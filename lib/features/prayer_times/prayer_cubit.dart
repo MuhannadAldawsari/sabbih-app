@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:adhan/adhan.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:location/location.dart' as loc;
 import 'package:sabbh/core/data/cities_data.dart';
 import 'package:sabbh/core/storage/shared_prefs_helper.dart';
+import 'package:flutter/material.dart';
+import 'package:sabbh/features/qibla/qibla_cubit.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 
 // ── State ────────────────────────────────────────────────────────
@@ -18,6 +21,7 @@ class PrayerLoaded extends PrayerState {
   final String locationName;
   final double lat;
   final double lng;
+  final bool isGpsLocation;   // true = GPS, false = manual city / saved
   final DateTime selectedDate;
   final PrayerTimes times;
   final Prayer nextPrayer;
@@ -30,6 +34,7 @@ class PrayerLoaded extends PrayerState {
     required this.locationName,
     required this.lat,
     required this.lng,
+    this.isGpsLocation = false,
     required this.selectedDate,
     required this.times,
     required this.nextPrayer,
@@ -52,9 +57,10 @@ class PrayerCubit extends Cubit<PrayerState> {
     _loadSavedLocation();
   }
 
-  static const _keyLat  = 'prayer_lat';
-  static const _keyLng  = 'prayer_lng';
-  static const _keyName = 'prayer_location_name';
+  static const _keyLat    = 'prayer_lat';
+  static const _keyLng    = 'prayer_lng';
+  static const _keyName   = 'prayer_location_name';
+  static const _keyIsGps  = 'prayer_is_gps';
 
   static const prayerKeys = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
   static const prayerLabels = {
@@ -96,19 +102,167 @@ class PrayerCubit extends Cubit<PrayerState> {
     final lat  = await prefs.getDouble(_keyLat);
     final lng  = await prefs.getDouble(_keyLng);
     final name = await prefs.getString(_keyName);
+    final isGps = await prefs.getBool(_keyIsGps) ?? false;
+
     if (lat != null && lng != null && name != null) {
-      _calculate(lat, lng, name, _selectedDate);
+      _calculate(lat, lng, name, _selectedDate, isGpsLocation: isGps);
     }
+
+    // محاولة التحديث الصامت للموقع في الخلفية (الاستراتيجية 1)
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (serviceEnabled) {
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+          );
+          final cities = await CitiesRepository.load();
+          CityEntry? closestCity;
+          double minDistance = double.infinity;
+          for (final city in cities) {
+            final distance = Geolocator.distanceBetween(
+              pos.latitude, pos.longitude, city.lat, city.lng,
+            );
+            if (distance < minDistance) {
+              minDistance = distance;
+              closestCity = city;
+            }
+          }
+          final locName = closestCity != null ? 'موقعك الحالي: ${closestCity.city}' : 'موقعك الحالي';
+          _calculate(pos.latitude, pos.longitude, locName, _selectedDate, isGpsLocation: true);
+        }
+      }
+    } catch (_) {}
   }
 
   // ── Persist current location ───────────────────────────────────
-  Future<void> _saveLocation(double lat, double lng, String name) async {
+  Future<void> _saveLocation(double lat, double lng, String name, {bool isGps = false}) async {
     final prefs = SharedPrefsHelper();
     await Future.wait([
       prefs.setDouble(_keyLat, lat),
       prefs.setDouble(_keyLng, lng),
       prefs.setString(_keyName, name),
+      prefs.setBool(_keyIsGps, isGps),
     ]);
+  }
+
+  // ── Qibla Strict GPS Flow (الاستراتيجية 2) ─────────────────────
+  Future<void> checkQiblaGps(BuildContext context, QiblaCubit qiblaCubit) async {
+    try {
+      // أولاً: فحص العتاد (هل الـ GPS شغال في الجهاز؟)
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        qiblaCubit.setGpsNotice(GpsNotice(
+          title: 'خدمة الموقع معطلة',
+          message: 'يرجى تفعيل خدمة تحديد الموقع (GPS) لتعمل البوصلة بدقة.',
+          actionLabel: 'تفعيل الموقع',
+          colorValue: 0xFFE53935, // أحمر
+          onAction: () async {
+            loc.Location locationService = loc.Location();
+            bool isEnabled = await locationService.requestService();
+            if (isEnabled) {
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (context.mounted) {
+                checkQiblaGps(context, qiblaCubit);
+              }
+            }
+          },
+        ));
+        return;
+      }
+
+      // ثانياً: فحص الإذن (Permission)
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return; // المستخدم رفض الإذن
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        qiblaCubit.setGpsNotice(GpsNotice(
+          title: 'الوصول الى الموقع',
+          message: 'تم إيقاف الوصول الى الموقع. يرجى تفعيله من الإعدادات.',
+          actionLabel: 'إعدادات التطبيق',
+          colorValue: 0xFFF57C00, // برتقالي غامق
+          onAction: () async => await Geolocator.openAppSettings(),
+        ));
+        return;
+      }
+
+      // ثانياً ب: فحص دقة الموقع (هل هو تقريبي أم دقيق؟)
+      LocationAccuracyStatus accuracy = await Geolocator.getLocationAccuracy();
+      if (accuracy == LocationAccuracyStatus.reduced) {
+        qiblaCubit.setGpsNotice(GpsNotice(
+          title: 'الموقع الدقيق مطلوب',
+          message: 'لتحديد اتجاه القبلة بدقة، يحتاج التطبيق إلى إذن "الموقع الدقيق". ',
+          actionLabel: 'تحسين الدقة',
+          colorValue: 0xFFFFA726, // برتقالي فاتح
+          onAction: () async {
+            try {
+              await Geolocator.requestPermission();
+              final newAccuracy = await Geolocator.getLocationAccuracy();
+              if (newAccuracy == LocationAccuracyStatus.reduced) {
+                qiblaCubit.setGpsNotice(GpsNotice(
+                  title: 'تحسين الدقة',
+                  message: 'لم يتم الترقية. يمكنك تغييرها يدويًا من إعدادات التطبيق',
+                  actionLabel: 'الإعدادات',
+                  colorValue: 0xFFFFA726, // برتقالي فاتح
+                  onAction: () async => await Geolocator.openAppSettings(),
+                ));
+              } else {
+                if (context.mounted) {
+                  checkQiblaGps(context, qiblaCubit);
+                }
+              }
+            } catch (_) {}
+          },
+        ));
+        return;
+      }
+
+      // إخفاء الإشعار في حال كان موجود وتم حل المشكلة
+      qiblaCubit.clearGpsNotice();
+
+      // ثالثاً: جلب الموقع الطازج بدقة عالية (Fresh Location)
+      qiblaCubit.setLoading(true);
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      // تمرير الموقع الطازج إلى QiblaCubit
+      qiblaCubit.start(pos.latitude, pos.longitude);
+
+      // تحديث مواقيت الصلاة في كامل التطبيق
+      final cities = await CitiesRepository.load();
+      CityEntry? closestCity;
+      double minDistance = double.infinity;
+
+      for (final city in cities) {
+        final distance = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude,
+          city.lat, city.lng,
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestCity = city;
+        }
+      }
+
+      final locName = closestCity != null
+          ? 'موقعك الحالي: ${closestCity.city}'
+          : 'موقعك الحالي';
+
+      _calculate(pos.latitude, pos.longitude, locName, _selectedDate, isGpsLocation: true);
+
+    } catch (e) {
+      qiblaCubit.setError('تعذّر تحديد الموقع بدقة: $e');
+    }
   }
 
   // ── GPS Flow ───────────────────────────────────────────────────
@@ -162,7 +316,7 @@ class PrayerCubit extends Cubit<PrayerState> {
           ? 'موقعك الحالي: ${closestCity.city}'
           : 'موقعك الحالي';
 
-      _calculate(pos.latitude, pos.longitude, locName, _selectedDate);
+      _calculate(pos.latitude, pos.longitude, locName, _selectedDate, isGpsLocation: true);
     } catch (e) {
       _emitGpsError('تعذّر تحديد الموقع: $e', previousLoaded);
     }
@@ -171,14 +325,14 @@ class PrayerCubit extends Cubit<PrayerState> {
   // ── City Selection Flow ────────────────────────────────────────
   void selectCity(CityEntry city) {
     emit(PrayerLoading());
-    _calculate(city.lat, city.lng, city.displayName, _selectedDate);
+    _calculate(city.lat, city.lng, city.displayName, _selectedDate, isGpsLocation: false);
   }
 
   // ── Recalculate with current location (after adjustment change) ─
   void _recalculate() {
     final s = state;
     if (s is PrayerLoaded) {
-      _calculate(s.lat, s.lng, s.locationName, _selectedDate);
+      _calculate(s.lat, s.lng, s.locationName, _selectedDate, isGpsLocation: s.isGpsLocation);
     }
   }
 
@@ -186,7 +340,7 @@ class PrayerCubit extends Cubit<PrayerState> {
     _selectedDate = _stripTime(date);
     final s = state;
     if (s is PrayerLoaded) {
-      _calculate(s.lat, s.lng, s.locationName, _selectedDate);
+      _calculate(s.lat, s.lng, s.locationName, _selectedDate, isGpsLocation: s.isGpsLocation);
     }
   }
 
@@ -195,7 +349,8 @@ class PrayerCubit extends Cubit<PrayerState> {
   void goToPreviousDay() => selectDate(_selectedDate.subtract(const Duration(days: 1)));
 
   // ── Core Calculation ───────────────────────────────────────────
-  void _calculate(double lat, double lng, String name, DateTime selectedDate) {
+  void _calculate(double lat, double lng, String name, DateTime selectedDate,
+      {bool isGpsLocation = false}) {
     try {
       final coords = Coordinates(lat, lng);
       final params  = CalculationMethod.umm_al_qura.getParameters();
@@ -219,6 +374,7 @@ class PrayerCubit extends Cubit<PrayerState> {
         locationName: name,
         lat: lat,
         lng: lng,
+        isGpsLocation: isGpsLocation,
         selectedDate: selectedDate,
         times: times,
         nextPrayer: next,
@@ -228,9 +384,8 @@ class PrayerCubit extends Cubit<PrayerState> {
         noticeId: 0,
       ));
 
-      _saveLocation(lat, lng, name);
+      _saveLocation(lat, lng, name, isGps: isGpsLocation);
       // Keep notification sync tied to real "today" only.
-      // Browsing past/future dates should not reschedule system notifications.
       if (_isSameDay(selectedDate, DateTime.now())) {
         IqamaNotificationService.instance.syncPrayerTimes(
           times: times,
@@ -275,6 +430,7 @@ class PrayerCubit extends Cubit<PrayerState> {
         locationName: previousLoaded.locationName,
         lat: previousLoaded.lat,
         lng: previousLoaded.lng,
+        isGpsLocation: previousLoaded.isGpsLocation,
         selectedDate: previousLoaded.selectedDate,
         times: previousLoaded.times,
         nextPrayer: previousLoaded.nextPrayer,
@@ -296,6 +452,7 @@ class PrayerCubit extends Cubit<PrayerState> {
       locationName: s.locationName,
       lat: s.lat,
       lng: s.lng,
+      isGpsLocation: s.isGpsLocation,
       selectedDate: s.selectedDate,
       times: s.times,
       nextPrayer: s.nextPrayer,

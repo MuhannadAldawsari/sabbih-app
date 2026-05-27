@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:scroll_to_index/scroll_to_index.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/adhkar/cubit/adhkar_cubit.dart';
 import 'package:sabbh/features/adhkar/models/adhkar_model.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
+import 'package:sabbh/core/utils/haptic_helper.dart';
 
 class AdhkarPage extends StatelessWidget {
   final int categoryId;
@@ -33,10 +33,23 @@ class _AdhkarPageContentState extends State<_AdhkarPageContent> {
   static const _vibrationKey = 'adhkar_vibration_enabled';
   bool _vibrationEnabled = true;
 
+  // ── Auto Scroll ──
+  bool _isAutoScrollEnabled = true;
+  late AutoScrollController _scrollController;
+
   @override
   void initState() {
     super.initState();
     _loadVibrationSetting();
+    _scrollController = AutoScrollController(
+      viewportBoundaryGetter: () => Rect.fromLTRB(0, 0, 0, MediaQuery.of(context).padding.bottom),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadVibrationSetting() async {
@@ -107,6 +120,32 @@ class _AdhkarPageContentState extends State<_AdhkarPageContent> {
                         alignment: Alignment.center,
                         children: [
                           Icon(
+                            Icons.keyboard_double_arrow_down_rounded,
+                            color: _isAutoScrollEnabled ? accent : subColor.withValues(alpha: 0.5),
+                          ),
+                          if (!_isAutoScrollEnabled)
+                            Transform.rotate(
+                              angle: -0.785,
+                              child: Container(
+                                width: 28,
+                                height: 2.5,
+                                color: Colors.red.withValues(alpha: 0.8),
+                              ),
+                            ),
+                        ],
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isAutoScrollEnabled = !_isAutoScrollEnabled;
+                        });
+                      },
+                      tooltip: _isAutoScrollEnabled ? 'إيقاف النزول التلقائي' : 'تفعيل النزول التلقائي',
+                    ),
+                    IconButton(
+                      icon: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(
                             Icons.vibration,
                             color: _vibrationEnabled ? accent : subColor.withValues(alpha: 0.5),
                           ),
@@ -126,39 +165,50 @@ class _AdhkarPageContentState extends State<_AdhkarPageContent> {
                     ),
                   ],
                 ),
-                body: Column(
-                  children: [
-                    _ProgressHeader(
-                      settings: settings,
-                      state: state,
-                      isDark: isDark,
-                      textColor: textColor,
-                      subColor: subColor,
-                      accent: accent,
-                      cardBg: cardBg,
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                        itemCount: state.items.length,
-                        itemBuilder: (context, index) {
-                          final item = state.items[index];
-                          return _AdhkarCard(
-                            item: item,
-                            index: index,
-                            totalItems: state.items.length,
-                            settings: settings,
-                            isDark: isDark,
-                            cardBg: cardBg,
-                            textColor: textColor,
-                            subColor: subColor,
-                            accent: accent,
-                            vibrationEnabled: _vibrationEnabled,
-                          );
-                        },
+                body: ColoredBox(
+                  color: bg,
+                  child: Column(
+                    children: [
+                      _ProgressHeader(
+                        settings: settings,
+                        state: state,
+                        isDark: isDark,
+                        textColor: textColor,
+                        subColor: subColor,
+                        accent: accent,
+                        cardBg: cardBg,
                       ),
-                    ),
-                  ],
+                      Expanded(
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                          itemCount: state.items.length,
+                          itemBuilder: (context, index) {
+                            final item = state.items[index];
+                            return AutoScrollTag(
+                              key: ValueKey(index),
+                              controller: _scrollController,
+                              index: index,
+                              child: _AdhkarCard(
+                                item: item,
+                                index: index,
+                                totalItems: state.items.length,
+                                settings: settings,
+                                isDark: isDark,
+                                cardBg: cardBg,
+                                textColor: textColor,
+                                subColor: subColor,
+                                accent: accent,
+                                vibrationEnabled: _vibrationEnabled,
+                                isAutoScrollEnabled: _isAutoScrollEnabled,
+                                scrollController: _scrollController,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -316,6 +366,8 @@ class _AdhkarCard extends StatefulWidget {
   final Color subColor;
   final Color accent;
   final bool vibrationEnabled;
+  final bool isAutoScrollEnabled;
+  final AutoScrollController scrollController;
 
   const _AdhkarCard({
     required this.item,
@@ -328,6 +380,8 @@ class _AdhkarCard extends StatefulWidget {
     required this.subColor,
     required this.accent,
     required this.vibrationEnabled,
+    required this.isAutoScrollEnabled,
+    required this.scrollController,
   });
 
   @override
@@ -368,17 +422,34 @@ class _AdhkarCardState extends State<_AdhkarCard> with SingleTickerProviderState
     final newStage = cubit.getCurrentStage(item.id);
     final isNowCompleted = cubit.isItemCompleted(item.id);
 
+    if (widget.vibrationEnabled) {
+      if (isNowCompleted && !wasCompleted) {
+        HapticHelper.zikrCompleted();
+      } else {
+        HapticHelper.tasbihClick();
+      }
+    }
+
     if (newStage > previousStage || isNowCompleted) {
       _playCompletionAnimation();
-      if (isNowCompleted && !wasCompleted && widget.vibrationEnabled) {
-        HapticFeedback.lightImpact();
+    }
+
+    // ── Auto Scroll ──
+    if (isNowCompleted && !wasCompleted) {
+      if (widget.isAutoScrollEnabled && widget.index < widget.totalItems - 1) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        widget.scrollController.scrollToIndex(
+          widget.index + 1,
+          preferPosition: AutoScrollPosition.begin,
+          duration: const Duration(milliseconds: 600),
+        );
       }
     }
   }
 
   void _resetCounter(AdhkarCubit cubit) {
     if (widget.vibrationEnabled) {
-      HapticFeedback.heavyImpact();
+      HapticHelper.tasbihClick();
     }
     cubit.resetSingleItem(widget.item.id);
   }
@@ -672,7 +743,7 @@ class _CircularCounterState extends State<_CircularCounter> with SingleTickerPro
           else
             Text(
               '${widget.currentTaps}/${widget.targetTaps}',
-              style: GoogleFonts.tajawal(
+              style: TextStyle(fontFamily: 'Tajawal', 
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
                 color: widget.isDark ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary,
@@ -906,10 +977,10 @@ TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight,
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
     case 1:
-      return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight, height: height);
     case 2:
-      return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight, height: height);
     default:
-      return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight, height: height);
   }
 }

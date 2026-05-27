@@ -1,8 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 import 'package:sabbh/views/pages/home_page.dart';
 import 'package:sabbh/views/pages/page2.dart';
@@ -39,7 +39,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
         final items = [
           _NavItem(icon: Icons.home_rounded,              label: 'الرئيسية'),
-          _NavItem(icon: Icons.mosque_rounded,            label: 'مواقيت الصلاة'),
+          _NavItem(icon: Icons.mosque_rounded,            label: 'الصلاة'),
           _NavItem(icon: Icons.explore_rounded,             label: 'القبلة'),
           _NavItem(icon: Icons.settings_rounded,          label: 'الإعدادات'),
         ];
@@ -47,6 +47,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Scaffold(
+            backgroundColor: isDark ? ColorsManager.darkBg : ColorsManager.lightBg,
             body: IndexedStack(
               index: _currentIndex,
               children: _pages,
@@ -102,7 +103,14 @@ class _MainScaffoldState extends State<MainScaffold> {
                             accent: accent,
                             unselected: unselected,
                             settings: settings,
-                            onTap: () => setState(() => _currentIndex = i),
+                            onTap: () {
+                              if (_currentIndex == i) return;
+                              if (_currentIndex == 1) {
+                                // Reset prayer date to today when leaving the prayer times tab
+                                context.read<PrayerCubit>().selectDate(DateTime.now());
+                              }
+                              setState(() => _currentIndex = i);
+                            },
                           );
                         }),
                       ),
@@ -186,8 +194,8 @@ class _NavButton extends StatelessWidget {
 
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight);
   }
 }

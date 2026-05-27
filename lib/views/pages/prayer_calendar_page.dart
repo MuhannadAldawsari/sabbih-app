@@ -1,7 +1,6 @@
 import 'package:adhan/adhan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
@@ -395,10 +394,10 @@ TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight)
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
     case 1:
-      return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight);
     case 2:
-      return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight);
     default:
-      return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight);
   }
 }

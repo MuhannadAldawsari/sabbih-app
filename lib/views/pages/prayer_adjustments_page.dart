@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/data/cities_data.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
@@ -57,7 +56,9 @@ class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
               builder: (context, prayerState) {
                 final adjustments = context.read<PrayerCubit>().adjustments;
 
-                return CustomScrollView(
+                return ColoredBox(
+                  color: bg,
+                  child: CustomScrollView(
                   slivers: [
                     // Header
                     SliverToBoxAdapter(
@@ -176,6 +177,7 @@ class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
                       ),
                     ),
                   ],
+                ),
                 );
               },
             ),
@@ -348,9 +350,19 @@ class _AdjustmentCard extends StatelessWidget {
             icon: Icons.remove_rounded,
             accent: accent,
             isDark: isDark,
-            onTap: () => context
-                .read<PrayerCubit>()
-                .setAdjustment(prayerKey, adjustment - 1),
+            onTap: () {
+              final s = context.read<PrayerCubit>().state;
+              if (s is! PrayerLoaded) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('الرجاء تحديد الموقع أولاً لتعديل أوقات الأذان'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
+              context.read<PrayerCubit>().setAdjustment(prayerKey, adjustment - 1);
+            },
           ),
           const SizedBox(width: 8),
           // + button
@@ -358,9 +370,19 @@ class _AdjustmentCard extends StatelessWidget {
             icon: Icons.add_rounded,
             accent: accent,
             isDark: isDark,
-            onTap: () => context
-                .read<PrayerCubit>()
-                .setAdjustment(prayerKey, adjustment + 1),
+            onTap: () {
+              final s = context.read<PrayerCubit>().state;
+              if (s is! PrayerLoaded) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('الرجاء تحديد الموقع أولاً لتعديل أوقات الأذان'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
+              context.read<PrayerCubit>().setAdjustment(prayerKey, adjustment + 1);
+            },
           ),
         ],
       ),
@@ -411,8 +433,8 @@ String _formatTime(DateTime dt) {
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight);
   }
 }

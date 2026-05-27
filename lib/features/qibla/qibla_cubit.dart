@@ -5,6 +5,24 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
+// ── GPS Notice (non-blocking banner data) ──────────────────────
+
+class GpsNotice {
+  final String title;
+  final String message;
+  final String actionLabel;
+  final Future<void> Function() onAction;
+  final int colorValue; // stored as int to avoid dart:ui in cubit
+
+  const GpsNotice({
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+    this.colorValue = 0xFF4CAF50, // default: green
+  });
+}
+
 // ── State ────────────────────────────────────────────────────────
 
 class QiblaState {
@@ -18,6 +36,7 @@ class QiblaState {
   final String? errorMessage;
   final bool isLoading;
   final double? magneticFieldStrength; // µT
+  final GpsNotice? gpsNotice;
 
   const QiblaState({
     this.qiblaAngle,
@@ -30,6 +49,7 @@ class QiblaState {
     this.errorMessage,
     this.isLoading = false,
     this.magneticFieldStrength,
+    this.gpsNotice,
   });
 
   bool get hasLocation => lat != null && lng != null;
@@ -53,6 +73,8 @@ class QiblaState {
     bool? isLoading,
     bool clearError = false,
     double? magneticFieldStrength,
+    GpsNotice? gpsNotice,
+    bool clearGpsNotice = false,
   }) {
     return QiblaState(
       qiblaAngle: qiblaAngle ?? this.qiblaAngle,
@@ -65,6 +87,7 @@ class QiblaState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isLoading: isLoading ?? this.isLoading,
       magneticFieldStrength: magneticFieldStrength ?? this.magneticFieldStrength,
+      gpsNotice: clearGpsNotice ? null : (gpsNotice ?? this.gpsNotice),
     );
   }
 }
@@ -85,6 +108,22 @@ class QiblaCubit extends Cubit<QiblaState> {
   final List<double> _magBuffer = [];
 
   /// Start compass and tilt detection once location is known.
+  void setLoading(bool loading) {
+    emit(state.copyWith(isLoading: loading));
+  }
+
+  void setError(String error) {
+    emit(state.copyWith(isLoading: false, errorMessage: error));
+  }
+
+  void setGpsNotice(GpsNotice notice) {
+    emit(state.copyWith(gpsNotice: notice));
+  }
+
+  void clearGpsNotice() {
+    emit(state.copyWith(clearGpsNotice: true));
+  }
+
   void start(double lat, double lng) {
     final qiblaAngle = Qibla(Coordinates(lat, lng)).direction;
 
@@ -178,6 +217,18 @@ class QiblaCubit extends Cubit<QiblaState> {
       },
       onError: (_) {},
     );
+  }
+
+  /// Reset to empty state (e.g. when user switches to manual city selection).
+  void reset() {
+    _compassSub?.cancel();
+    _accelSub?.cancel();
+    _magSub?.cancel();
+    _compassSub = null;
+    _accelSub = null;
+    _magSub = null;
+    _magBuffer.clear();
+    emit(const QiblaState());
   }
 
   @override

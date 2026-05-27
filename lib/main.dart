@@ -5,18 +5,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
-import 'package:sabbh/views/main_scaffold.dart';
+import 'package:sabbh/views/pages/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(const MyApp());
+
+  // Load settings BEFORE runApp to avoid theme/font flash
+  final initialSettings = await AppSettingsCubit.loadInitial();
+  runApp(MyApp(initialSettings: initialSettings));
   unawaited(_bootstrapBackgroundServices());
 }
 
@@ -32,13 +35,14 @@ Future<void> _bootstrapBackgroundServices() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final AppSettingsState initialSettings;
+  const MyApp({super.key, required this.initialSettings});
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (_) => AppSettingsCubit()),
+        BlocProvider(create: (_) => AppSettingsCubit(initialSettings)),
         BlocProvider(create: (_) => PrayerCubit()),
       ],
       child: BlocBuilder<AppSettingsCubit, AppSettingsState>(
@@ -51,9 +55,9 @@ class MyApp extends StatelessWidget {
           TextTheme buildTextTheme(Color bodyColor, Color displayColor) {
             TextStyle base(double size, FontWeight w, Color c) {
               switch (settings.fontFamilyIndex) {
-                case 1:  return GoogleFonts.cairo(fontSize: size, fontWeight: w, color: c);
-                case 2:  return GoogleFonts.amiri(fontSize: size, fontWeight: w, color: c);
-                default: return GoogleFonts.tajawal(fontSize: size, fontWeight: w, color: c);
+                case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size, fontWeight: w, color: c);
+                case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size, fontWeight: w, color: c);
+                default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, fontWeight: w, color: c);
               }
             }
             return TextTheme(
@@ -152,7 +156,7 @@ class MyApp extends StatelessWidget {
             theme: lightTheme,
             darkTheme: darkTheme,
             themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-            home: const MainScaffold(),
+            home: const SplashScreen(),
           );
         },
       ),

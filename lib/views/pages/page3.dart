@@ -3,13 +3,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lottie/lottie.dart' hide Marker;
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/features/qibla/qibla_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
+import 'package:sabbh/core/utils/stiff_bouncing_scroll_physics.dart';
 
 class Page3 extends StatelessWidget {
   final bool isActive;
@@ -58,6 +58,7 @@ class _QiblaViewState extends State<_QiblaView> {
     super.didUpdateWidget(old);
     if (widget.isActive && !_wasActive) {
       _startTiltHint();
+      _checkPreciseLocation();
     }
     _wasActive = widget.isActive;
   }
@@ -73,10 +74,25 @@ class _QiblaViewState extends State<_QiblaView> {
   void _tryLinkLocation() {
     if (_locationLinked) return;
     final prayerState = context.read<PrayerCubit>().state;
-    if (prayerState is PrayerLoaded) {
+    if (prayerState is PrayerLoaded && prayerState.isGpsLocation) {
       _locationLinked = true;
       context.read<QiblaCubit>().start(prayerState.lat, prayerState.lng);
+      // Check precise location when page first opens
+      _checkPreciseLocation();
     }
+  }
+
+  Future<void> _checkPreciseLocation() async {
+    if (!widget.isActive || !mounted) return;
+    final prayerState = context.read<PrayerCubit>().state;
+    // إذا لم يكن هناك بيانات موقع محفوظة مسبقاً (أول استخدام للتطبيق)، لا نطلب الموقع تلقائياً
+    if (prayerState is! PrayerLoaded) return;
+
+    await context.read<PrayerCubit>().checkQiblaGps(context, context.read<QiblaCubit>());
+  }
+
+  Future<void> _onGpsTap() async {
+    await context.read<PrayerCubit>().checkQiblaGps(context, context.read<QiblaCubit>());
   }
 
   @override
@@ -84,13 +100,10 @@ class _QiblaViewState extends State<_QiblaView> {
     return BlocListener<PrayerCubit, PrayerState>(
       listenWhen: (previous, current) {
         if (current is PrayerLoaded) {
-          // Always react when location changes for QiblaCubit linking.
           if (previous is! PrayerLoaded) return true;
           if (current.lat != previous.lat || current.lng != previous.lng) return true;
-          // React to new notice messages.
           if (current.noticeMessage != null && current.noticeMessage!.isNotEmpty) {
-            final prevNoticeId = previous.noticeId;
-            return current.noticeId != prevNoticeId;
+            return current.noticeId != previous.noticeId;
           }
           return false;
         }
@@ -98,8 +111,14 @@ class _QiblaViewState extends State<_QiblaView> {
       },
       listener: (context, prayerState) {
         if (prayerState is PrayerLoaded) {
-          _locationLinked = true;
-          context.read<QiblaCubit>().start(prayerState.lat, prayerState.lng);
+          if (prayerState.isGpsLocation) {
+            _locationLinked = true;
+            context.read<QiblaCubit>().start(prayerState.lat, prayerState.lng);
+            _checkPreciseLocation();
+          } else {
+            _locationLinked = false;
+            context.read<QiblaCubit>().reset();
+          }
           if (widget.isActive) {
             final notice = prayerState.noticeMessage;
             if (notice != null && notice.isNotEmpty) {
@@ -126,76 +145,102 @@ class _QiblaViewState extends State<_QiblaView> {
           final isDark = settings.isDarkMode;
           final bg = isDark ? ColorsManager.darkBg : ColorsManager.lightBg;
           final accent = isDark ? ColorsManager.darkAccent : ColorsManager.lightAccent;
-          final accentDark = isDark ? const Color(0xFF0D2E15) : const Color(0xFF2C5F3A);
+          final accentDark = const Color(0xFF2C5F3A);
 
           return Directionality(
             textDirection: TextDirection.rtl,
             child: Scaffold(
               backgroundColor: bg,
+              extendBodyBehindAppBar: true,
               body: BlocBuilder<QiblaCubit, QiblaState>(
                 builder: (context, qiblaState) {
-                  return CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: _Header(
-                          settings: settings,
-                          isDark: isDark,
-                          accent: accent,
-                          accentDark: accentDark,
-                          qiblaState: qiblaState,
-                        ),
-                      ),
-                      if (!qiblaState.hasLocation)
-                        SliverFillRemaining(
-                          child: _NoLocationState(
-                            settings: settings,
-                            isDark: isDark,
-                            accent: accent,
-                          ),
-                        )
-                      else ...[
-                        // Mode toggle
-                        SliverToBoxAdapter(
-                          child: _ModeControls(
-                            showMap: _showMap,
-                            onToggle: () => setState(() => _showMap = !_showMap),
-                            settings: settings,
-                            isDark: isDark,
-                            accent: accent,
-                          ),
-                        ),
-                        // Calibration warning (above compass) — hidden
-                        // Compass or Map
-                        if (_showMap)
+                  return Stack(
+                    children: [
+                      // ── Main scrollable content ────────────
+                      CustomScrollView(
+                        physics: const StiffBouncingScrollPhysics(),
+                        slivers: [
                           SliverToBoxAdapter(
-                            child: _MapView(
-                              lat: qiblaState.lat!,
-                              lng: qiblaState.lng!,
-                              isDark: isDark,
-                              accent: accent,
-                            ),
-                          )
-                        else
-                          SliverToBoxAdapter(
-                            child: _CompassView(
-                              qiblaState: qiblaState,
+                            child: _Header(
                               settings: settings,
                               isDark: isDark,
                               accent: accent,
+                              accentDark: accentDark,
+                              qiblaState: qiblaState,
+                              onGpsTap: _onGpsTap,
                             ),
                           ),
-                        // Tilt hint (below compass, fades after 5s)
-                        if (!_showMap)
-                          SliverToBoxAdapter(
-                            child: AnimatedOpacity(
-                              opacity: _showTiltHint ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 600),
-                              curve: Curves.easeOut,
-                              child: _TiltWarning(settings: settings, isDark: isDark),
+                          if (!qiblaState.hasLocation)
+                            SliverFillRemaining(
+                              child: BlocBuilder<PrayerCubit, PrayerState>(
+                                builder: (context, prayerState) => _NoLocationState(
+                                  settings: settings,
+                                  isDark: isDark,
+                                  accent: accent,
+                                  onGpsTap: _onGpsTap,
+                                  isCitySelected: prayerState is PrayerLoaded &&
+                                      !prayerState.isGpsLocation,
+                                ),
+                              ),
+                            )
+                          else ...[
+                            SliverToBoxAdapter(
+                              child: _ModeControls(
+                                showMap: _showMap,
+                                onToggle: () => setState(() => _showMap = !_showMap),
+                                onGpsTap: _onGpsTap,
+                                settings: settings,
+                                isDark: isDark,
+                                accent: accent,
+                              ),
                             ),
+                            if (_showMap)
+                              SliverToBoxAdapter(
+                                child: _MapView(
+                                  lat: qiblaState.lat!,
+                                  lng: qiblaState.lng!,
+                                  isDark: isDark,
+                                  accent: accent,
+                                ),
+                              )
+                            else
+                              SliverToBoxAdapter(
+                                child: _CompassView(
+                                  qiblaState: qiblaState,
+                                  settings: settings,
+                                  isDark: isDark,
+                                  accent: accent,
+                                ),
+                              ),
+                            if (!_showMap)
+                              SliverToBoxAdapter(
+                                child: AnimatedOpacity(
+                                  opacity: _showTiltHint ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 600),
+                                  curve: Curves.easeOut,
+                                  child: _TiltWarning(settings: settings, isDark: isDark),
+                                ),
+                              ),
+                            const SliverToBoxAdapter(child: SizedBox(height: 160)),
+                          ],
+                        ],
+                      ),
+                      // ── GPS Banner Overlay ──────────────────
+                      if (qiblaState.gpsNotice != null)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: _GpsBanner(
+                            key: ValueKey(qiblaState.gpsNotice),
+                            notice: qiblaState.gpsNotice!,
+                            settings: settings,
+                            isDark: isDark,
+                            accent: accent,
+                            onDismiss: () =>
+                                context.read<QiblaCubit>().clearGpsNotice(),
                           ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 110)),
-                      ],
+                        ),
                     ],
                   );
                 },
@@ -215,6 +260,7 @@ class _Header extends StatelessWidget {
   final bool isDark;
   final Color accent, accentDark;
   final QiblaState qiblaState;
+  final VoidCallback onGpsTap;
 
   const _Header({
     required this.settings,
@@ -222,6 +268,7 @@ class _Header extends StatelessWidget {
     required this.accent,
     required this.accentDark,
     required this.qiblaState,
+    required this.onGpsTap,
   });
 
   @override
@@ -231,30 +278,43 @@ class _Header extends StatelessWidget {
         ? 'زاوية القبلة: ${qiblaState.qiblaAngle!.toStringAsFixed(1)}°'
         : 'حدد موقعك أولاً';
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, topPad + 20, 20, 28),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accentDark, accent],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomCenter,
+      children: [
+        Positioned(
+          top: -1000,
+          left: 0,
+          right: 0,
+          bottom: 50,
+          child: Container(color: accentDark),
         ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(22),
-          bottomRight: Radius.circular(22),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 15),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [accentDark, accent],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(22),
+              bottomRight: Radius.circular(22),
+            ),
+          ),
+          child: Column(
+            children: [
+              Text('اتجاه القبلة',
+                  style: _font(settings, 22, ColorsManager.white, FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: _font(settings, 14,
+                      ColorsManager.white.withValues(alpha: 0.85), FontWeight.w500)),
+            ],
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Text('اتجاه القبلة',
-              style: _font(settings, 28, ColorsManager.white, FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(subtitle,
-              style: _font(settings, 14,
-                  ColorsManager.white.withValues(alpha: 0.85), FontWeight.w500)),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -264,6 +324,7 @@ class _Header extends StatelessWidget {
 class _ModeControls extends StatelessWidget {
   final bool showMap;
   final VoidCallback onToggle;
+  final VoidCallback onGpsTap;
   final AppSettingsState settings;
   final bool isDark;
   final Color accent;
@@ -271,6 +332,7 @@ class _ModeControls extends StatelessWidget {
   const _ModeControls({
     required this.showMap,
     required this.onToggle,
+    required this.onGpsTap,
     required this.settings,
     required this.isDark,
     required this.accent,
@@ -282,45 +344,71 @@ class _ModeControls extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: ColorsManager.black.withValues(alpha: isDark ? 0.3 : 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _ToggleButton(
-                label: 'البوصلة',
-                icon: Icons.explore_rounded,
-                selected: !showMap,
-                onTap: showMap ? onToggle : null,
-                settings: settings,
-                accent: accent,
-                isDark: isDark,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: ColorsManager.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ToggleButton(
+                      label: 'البوصلة',
+                      icon: Icons.explore_rounded,
+                      selected: !showMap,
+                      onTap: showMap ? onToggle : null,
+                      settings: settings,
+                      accent: accent,
+                      isDark: isDark,
+                    ),
+                  ),
+                  Expanded(
+                    child: _ToggleButton(
+                      label: 'الخريطة',
+                      icon: Icons.map_rounded,
+                      selected: showMap,
+                      onTap: !showMap ? onToggle : null,
+                      settings: settings,
+                      accent: accent,
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Expanded(
-              child: _ToggleButton(
-                label: 'الخريطة',
-                icon: Icons.map_rounded,
-                selected: showMap,
-                onTap: !showMap ? onToggle : null,
-                settings: settings,
-                accent: accent,
-                isDark: isDark,
+          ),
+          const SizedBox(width: 10),
+          // GPS button
+          GestureDetector(
+            onTap: onGpsTap,
+            child: Container(
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: ColorsManager.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
+              child: Icon(Icons.gps_fixed_rounded, color: accent, size: 22),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1074,9 +1162,8 @@ class _QiblaArrowPainter extends CustomPainter {
       ..color = accent
       ..style = PaintingStyle.fill;
 
-    // Arrow pointing up (toward qibla direction)
     final path = Path()
-      ..moveTo(center.dx, center.dy - 100) // tip
+      ..moveTo(center.dx, center.dy - 100)
       ..lineTo(center.dx - 14, center.dy - 60)
       ..lineTo(center.dx - 4, center.dy - 65)
       ..lineTo(center.dx - 4, center.dy + 40)
@@ -1086,13 +1173,7 @@ class _QiblaArrowPainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(path, paint);
-
-    // Small circle at tip
-    canvas.drawCircle(
-      Offset(center.dx, center.dy - 100),
-      4,
-      paint,
-    );
+    canvas.drawCircle(Offset(center.dx, center.dy - 100), 4, paint);
   }
 
   @override
@@ -1100,7 +1181,7 @@ class _QiblaArrowPainter extends CustomPainter {
       accent != oldDelegate.accent;
 }
 
-// ── Map View (fallback) ───────────────────────────────────────────
+// ── Map View ──────────────────────────────────────────────────────
 
 const LatLng _meccaLocation = LatLng(21.4225, 39.8262);
 
@@ -1121,13 +1202,14 @@ class _MapView extends StatelessWidget {
     final userPos = LatLng(lat, lng);
     final centerLat = (lat + _meccaLocation.latitude) / 2;
     final centerLng = (lng + _meccaLocation.longitude) / 2;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: SizedBox(
-          height: 420,
+          height: screenHeight * 0.62,
           child: FlutterMap(
             options: MapOptions(
               initialCenter: LatLng(centerLat, centerLng),
@@ -1138,10 +1220,8 @@ class _MapView extends StatelessWidget {
             ),
             children: [
               TileLayer(
-                urlTemplate: isDark
-                    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.sabbh',
                 retinaMode: RetinaMode.isHighDensity(context),
               ),
               PolylineLayer(
@@ -1220,11 +1300,15 @@ class _NoLocationState extends StatelessWidget {
   final AppSettingsState settings;
   final bool isDark;
   final Color accent;
+  final VoidCallback onGpsTap;
+  final bool isCitySelected;
 
   const _NoLocationState({
     required this.settings,
     required this.isDark,
     required this.accent,
+    required this.onGpsTap,
+    this.isCitySelected = false,
   });
 
   @override
@@ -1232,22 +1316,43 @@ class _NoLocationState extends StatelessWidget {
     final textColor = isDark ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary;
     final subColor = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
 
+    final icon    = isCitySelected ? Icons.gps_off_rounded : Icons.explore_off_rounded;
+    final title   = isCitySelected ? 'البوصلة تحتاج GPS' : 'الموقع غير محدد';
+    final message = isCitySelected
+        ? 'لاستخدام بوصلة القبلة، يجب تحديد الموقع عبر GPS وليس من قائمة المدن.'
+        : 'لتحديد اتجاه القبلة بدقة، يحتاج التطبيق إلى معرفة موقعك الجغرافي.';
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.location_off_rounded,
-                size: 64, color: accent.withValues(alpha: 0.6)),
+            Icon(icon, size: 64, color: accent.withValues(alpha: 0.6)),
             const SizedBox(height: 20),
-            Text('لم يتم تحديد الموقع',
+            Text(title,
                 style: _font(settings, 18, textColor, FontWeight.bold),
                 textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Text('اذهب إلى صفحة مواقيت الصلاة وحدد موقعك أولاً\nلتتمكن من استخدام بوصلة القبلة',
-                style: _font(settings, 14, subColor, FontWeight.normal),
-                textAlign: TextAlign.center),
+            Text(
+              message,
+              style: _font(settings, 14, subColor, FontWeight.normal),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: onGpsTap,
+              icon: const Icon(Icons.gps_fixed_rounded, size: 18),
+              label: Text('تحديد الموقع تلقائياً',
+                  style: _font(settings, 14, ColorsManager.white, FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: ColorsManager.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
           ],
         ),
       ),
@@ -1308,13 +1413,201 @@ class _ShortestPathRotationState extends State<_ShortestPathRotation> {
   }
 }
 
+// ── GPS Banner (non-blocking overlay) ────────────────────────────
+
+class _GpsBanner extends StatefulWidget {
+  final GpsNotice notice;
+  final AppSettingsState settings;
+  final bool isDark;
+  final Color accent;
+  final VoidCallback onDismiss;
+
+  const _GpsBanner({
+    super.key,
+    required this.notice,
+    required this.settings,
+    required this.isDark,
+    required this.accent,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_GpsBanner> createState() => _GpsBannerState();
+}
+
+class _GpsBannerState extends State<_GpsBanner>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<Offset> _slide;
+  late Animation<double> _fade;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _slide = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _dismiss() async {
+    await _ctrl.reverse();
+    widget.onDismiss();
+  }
+
+  Future<void> _onAction() async {
+    setState(() => _loading = true);
+    final originalNotice = widget.notice;
+    try {
+      await widget.notice.onAction();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    // Only dismiss if the notice hasn't been changed to a new one during the action
+    if (mounted) {
+      final currentNotice = context.read<QiblaCubit>().state.gpsNotice;
+      if (currentNotice == originalNotice) {
+        _dismiss();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    final cardBg = widget.isDark ? ColorsManager.darkCard : ColorsManager.lightCard;
+    final textColor = widget.isDark
+        ? ColorsManager.darkTextPrimary
+        : ColorsManager.lightTextPrimary;
+    final subColor = widget.isDark
+        ? ColorsManager.darkTextSecondary
+        : ColorsManager.lightTextSecondary;
+    final noticeColor = Color(widget.notice.colorValue);
+
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Container(
+          width: double.infinity,
+          margin: EdgeInsets.fromLTRB(12, topPad + 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: noticeColor.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: ColorsManager.black
+                    .withValues(alpha: widget.isDark ? 0.35 : 0.10),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: noticeColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.gps_fixed_rounded,
+                  color: noticeColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.notice.title,
+                      style: _font(
+                        widget.settings, 13, textColor, FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.notice.message,
+                      style: _font(
+                        widget.settings, 11, subColor, FontWeight.normal),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Action button
+              _loading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: noticeColor,
+                      ),
+                    )
+                  : TextButton(
+                      onPressed: _onAction,
+                      style: TextButton.styleFrom(
+                        foregroundColor: noticeColor,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                              color: noticeColor.withValues(alpha: 0.5)),
+                        ),
+                      ),
+                      child: Text(
+                        widget.notice.actionLabel,
+                        style: _font(widget.settings, 11, noticeColor,
+                            FontWeight.w700),
+                      ),
+                    ),
+              // Dismiss button
+              IconButton(
+                onPressed: _dismiss,
+                icon: Icon(Icons.close_rounded, size: 18, color: subColor),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight);
   }
 }

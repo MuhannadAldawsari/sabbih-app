@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/core/storage/shared_prefs_helper.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
@@ -21,13 +22,73 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   bool _eveningEnabled = true;
   TimeOfDay _morningTime = const TimeOfDay(hour: 5, minute: 0);
   TimeOfDay _eveningTime = const TimeOfDay(hour: 16, minute: 0);
+  bool _morningSound = true;
+  bool _eveningSound = true;
+
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(IqamaNotificationService.instance.ensureAndroidNotificationPermission());
     });
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = SharedPrefsHelper();
+    final notificationsEnabled = await prefs.getBool('adhkar_notif_enabled') ?? false;
+    final morningEnabled = await prefs.getBool('morning_adhkar_enabled') ?? true;
+    final eveningEnabled = await prefs.getBool('evening_adhkar_enabled') ?? true;
+    final morningSound = await prefs.getBool('morning_adhkar_sound') ?? true;
+    final eveningSound = await prefs.getBool('evening_adhkar_sound') ?? true;
+    
+    final mHour = await prefs.getInt('morning_adhkar_hour') ?? 5;
+    final mMin = await prefs.getInt('morning_adhkar_minute') ?? 0;
+    final eHour = await prefs.getInt('evening_adhkar_hour') ?? 16;
+    final eMin = await prefs.getInt('evening_adhkar_minute') ?? 0;
+
+    setState(() {
+      _notificationsEnabled = notificationsEnabled;
+      _morningEnabled = morningEnabled;
+      _eveningEnabled = eveningEnabled;
+      _morningSound = morningSound;
+      _eveningSound = eveningSound;
+      _morningTime = TimeOfDay(hour: mHour, minute: mMin);
+      _eveningTime = TimeOfDay(hour: eHour, minute: eMin);
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    await IqamaNotificationService.instance.updateAdhkarSettings(
+      morningEnabled: _morningEnabled,
+      morningSound: _morningSound,
+      morningTime: _morningTime,
+      eveningEnabled: _eveningEnabled,
+      eveningSound: _eveningSound,
+      eveningTime: _eveningTime,
+    );
+  }
+
+  void _playSoundPreview(bool isMorning) async {
+    try {
+      await _audioPlayer.stop();
+      final resourceName = isMorning ? 'morning.mp3' : 'evening.mp3';
+      await _audioPlayer.play(AssetSource('sounds/$resourceName'));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تشغيل المعاينة. تأكد من إعادة تشغيل التطبيق بالكامل (Restart).')),
+        );
+      }
+    }
   }
 
   @override
@@ -59,7 +120,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 ),
               ],
             ),
-            body: ListView(
+            body: ColoredBox(
+              color: bg,
+              child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               children: [
               // ── Master Toggle ─────────────────────────────────
@@ -81,6 +144,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                       await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
                     }
                     setState(() => _notificationsEnabled = v);
+                    await SharedPrefsHelper().setBool('adhkar_notif_enabled', v);
                   },
                 ),
               ),
@@ -103,9 +167,25 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                         settings: settings,
                         textColor: textColor,
                         subColor: subColor,
-                        onChanged: (v) => setState(() => _morningEnabled = v),
+                        onChanged: (v) {
+                          setState(() => _morningEnabled = v);
+                          _saveSettings();
+                        },
                       ),
                       if (_morningEnabled) ...[
+                        Divider(color: divider, height: 1),
+                        _soundSelectionRow(
+                          isMorning: true,
+                          value: _morningSound,
+                          settings: settings,
+                          textColor: textColor,
+                          subColor: subColor,
+                          accent: accent,
+                          onChanged: (v) {
+                            setState(() => _morningSound = v);
+                            _saveSettings();
+                          },
+                        ),
                         Divider(color: divider, height: 1),
                         _timePicker(
                           label: 'وقت التنبيه',
@@ -124,7 +204,10 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                               subColor: subColor,
                               accent: accent,
                             );
-                            if (t != null) setState(() => _morningTime = t);
+                            if (t != null) {
+                              setState(() => _morningTime = t);
+                              _saveSettings();
+                            }
                           },
                         ),
                       ],
@@ -149,9 +232,25 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                         settings: settings,
                         textColor: textColor,
                         subColor: subColor,
-                        onChanged: (v) => setState(() => _eveningEnabled = v),
+                        onChanged: (v) {
+                          setState(() => _eveningEnabled = v);
+                          _saveSettings();
+                        },
                       ),
                       if (_eveningEnabled) ...[
+                        Divider(color: divider, height: 1),
+                        _soundSelectionRow(
+                          isMorning: false,
+                          value: _eveningSound,
+                          settings: settings,
+                          textColor: textColor,
+                          subColor: subColor,
+                          accent: accent,
+                          onChanged: (v) {
+                            setState(() => _eveningSound = v);
+                            _saveSettings();
+                          },
+                        ),
                         Divider(color: divider, height: 1),
                         _timePicker(
                           label: 'وقت التنبيه',
@@ -170,7 +269,10 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                               subColor: subColor,
                               accent: accent,
                             );
-                            if (t != null) setState(() => _eveningTime = t);
+                            if (t != null) {
+                              setState(() => _eveningTime = t);
+                              _saveSettings();
+                            }
                           },
                         ),
                       ],
@@ -181,14 +283,13 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               const SizedBox(height: 100),
               ],
             ),
+            ),
           ),
         );
       },
     );
   }
 
-  bool _isSameCalendarDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 
   /// أوقات المرجع تُؤخذ من [PrayerLoaded] لنفس **يوم التقويم المعروض** في صفحة المواقيت.
   /// إن كان ذلك اليوم ليس «اليوم» الحالي لا نعرض أرقاماً لتجنب الالتباس.
@@ -202,86 +303,108 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     required Color accent,
   }) async {
     final guidance = isMorning
-        ? 'وقت قراءة أذكار الصباح يبدأ بعد أذان الفجر .'
-        : 'وقت قراءة أذكار المساء يبدأ بعد صلاة العصر .';
+        ? 'يبدأ وقت أذكار الصباح بعد أذان الفجر، ويُستحب قراءتها في هذا الوقت.'
+        : 'يبدأ وقت أذكار المساء بعد صلاة العصر، ويُستحب قراءتها في هذا الوقت.';
 
     final prayerState = context.read<PrayerCubit>().state;
     late final String anchorLine;
+    bool hasAnchor = false;
+
     if (prayerState is PrayerLoaded) {
-      final now = DateTime.now();
-      final sameAsToday = _isSameCalendarDay(prayerState.selectedDate, now);
       final loc = MaterialLocalizations.of(context);
-      if (sameAsToday) {
-        final anchor = isMorning
-            ? prayerState.times.fajr
-            : prayerState.times.asr.add(const Duration(minutes: 20));
-        final tod = TimeOfDay.fromDateTime(anchor);
-        anchorLine = 'وقت مرجعي مُقترح لهذا اليوم: ${loc.formatTimeOfDay(tod)}';
-      } else {
-        anchorLine =
-            'المواقيت في التطبيق تعرض يوماً آخر؛ افتح صفحة المواقيت واختر اليوم الحالي لعرض وقت مرجعي محسوب هنا.';
-      }
+      final anchor = isMorning
+          ? prayerState.times.fajr
+          : prayerState.times.asr.add(const Duration(minutes: 20));
+      final tod = TimeOfDay.fromDateTime(anchor);
+      anchorLine = 'وقت البداية المُقترح: ${loc.formatTimeOfDay(tod)}';
+      hasAnchor = true;
     } else {
       anchorLine =
-          'فعّل الموقع أو اختر المدينة من صفحة المواقيت لعرض وقت مرجعي من مواقيت الصلاة.';
+          'تفعيل الموقع يتيح لك عرض الوقت المقترح بناءً على مواقيت الصلاة.';
     }
 
     return showTimePicker(
       context: context,
       initialTime: initial,
+      cancelText: 'إلغاء',
+      confirmText: 'حفظ',
+      helpText: isMorning ? 'تنبيه أذكار الصباح' : 'تنبيه أذكار المساء',
       builder: (dialogContext, child) {
+        final isDark = settings.isDarkMode;
+        final cardColor = isDark ? ColorsManager.darkCard : ColorsManager.lightCard;
+
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Theme(
             data: Theme.of(context),
-            child: MediaQuery(
-              data: MediaQuery.of(dialogContext),
+            child: Center(
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            guidance,
-                            textAlign: TextAlign.right,
-                            style: _font(settings, 13, subColor, FontWeight.w500),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 10),
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              child: Row(
-                                textDirection: TextDirection.rtl,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: accent,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
+                                  Icon(Icons.lightbulb_outline, color: accent, size: 22),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      anchorLine,
+                                      guidance,
                                       textAlign: TextAlign.right,
-                                      style: _font(settings, 13, textColor, FontWeight.w700),
+                                      style: _font(settings, 13, textColor, FontWeight.w600),
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: accent.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: accent.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (hasAnchor) ...[
+                                      Icon(Icons.access_time_filled, color: accent, size: 18),
+                                    ] else ...[
+                                      Icon(Icons.info_outline, color: accent, size: 18),
+                                    ],
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        anchorLine,
+                                        textAlign: TextAlign.right,
+                                        style: _font(settings, 13, textColor, FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                     if (child != null) child,
@@ -368,6 +491,78 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     );
   }
 
+  Widget _soundSelectionRow({
+    required bool isMorning,
+    required bool value,
+    required AppSettingsState settings,
+    required Color textColor,
+    required Color subColor,
+    required Color accent,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => onChanged(true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: value ? accent.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: value ? accent : subColor.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.volume_up_rounded, size: 20, color: value ? accent : subColor),
+                        const SizedBox(width: 6),
+                        Text('تنبيه بصوت', style: _font(settings, 12, value ? accent : subColor, FontWeight.w600)),
+                        if (value) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => _playSoundPreview(isMorning),
+                            child: Icon(Icons.play_circle_fill, size: 20, color: accent),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => onChanged(false),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: !value ? accent.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: !value ? accent : subColor.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.notifications_active_outlined, size: 20, color: !value ? accent : subColor),
+                        const SizedBox(width: 6),
+                        Text('إشعار فقط', style: _font(settings, 12, !value ? accent : subColor, FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _timePicker({
     required String label,
     required TimeOfDay time,
@@ -406,8 +601,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
 
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight);
   }
 }

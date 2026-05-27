@@ -1,13 +1,16 @@
+import 'package:adhan/adhan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:sabbh/core/resources/colores.dart';
+import 'package:sabbh/core/utils/stiff_bouncing_scroll_physics.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 import 'package:sabbh/views/pages/adhkar_page.dart';
 import 'package:sabbh/views/pages/more_adhkar_page.dart';
 import 'package:sabbh/features/adhkar/services/adhkar_service.dart';
 import 'package:sabbh/features/adhkar/models/adhkar_model.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
+import 'dart:async';
 
 // ── Arabic month names ────────────────────────────────────────────
 
@@ -39,12 +42,12 @@ class HomePage extends StatelessWidget {
         final isDark    = settings.isDarkMode;
         final bg        = isDark ? ColorsManager.darkBg    : ColorsManager.lightBg;
         final textColor = isDark ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary;
-
         return Scaffold(
           backgroundColor: bg,
           // Let header bleed behind status bar
           extendBodyBehindAppBar: true,
           body: CustomScrollView(
+            physics: const StiffBouncingScrollPhysics(),
             slivers: [
               // ── Rounded Header ────────────────────────────────
               SliverToBoxAdapter(
@@ -53,8 +56,7 @@ class HomePage extends StatelessWidget {
 
               // ── Body content ──────────────────────────────────
               SliverPadding(
-                // Extra top padding accounts for floating card overlap
-                padding: const EdgeInsets.fromLTRB(20, 64, 20, 110),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
                     _sectionLabel('الأذكار', settings, textColor),
@@ -93,7 +95,7 @@ class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent      = isDark ? ColorsManager.darkAccent  : ColorsManager.lightAccent;
-    final accentDark  = isDark ? const Color(0xFF0A1A0C)   : const Color(0xFF2E5E3A);
+    final accentDark  = const Color(0xFF2E5E3A);
     final cardBg      = isDark ? ColorsManager.darkCard     : ColorsManager.lightCard;
     final textOnAccent = ColorsManager.white;
     final subOnAccent  = ColorsManager.white.withValues(alpha: 0.80);
@@ -107,61 +109,77 @@ class _HomeHeader extends StatelessWidget {
     final hijriStr =
         '${hijri.hDay} ${_hijriMonths[hijri.hMonth - 1]} ${hijri.hYear}';
 
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.bottomCenter,
-      children: [
-        // ── Full-width gradient header with rounded bottom corners ─
-        Container(
-          width: double.infinity,
-          // Extra height = status bar + content
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [accentDark, accent],
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-            ),
-            borderRadius: const BorderRadius.only(
-              bottomLeft:  Radius.circular(22),
-              bottomRight: Radius.circular(22),
-            ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 44),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.bottomCenter,
+        children: [
+          // الخدعة السحرية: امتداد لوني طويل جداً للأعلى
+          Positioned(
+            top: -1000, // يمتد للأعلى مسافة 1000 بيكسل خارج الشاشة!
+            left: 0,
+            right: 0,
+            bottom: 50, // يتداخل قليلاً مع الهيدر لدمج اللون بنعومة
+            // نستخدم اللون العلوي الداكن للتدرج ليكون الامتداد طبيعياً
+            child: Container(color: accentDark), 
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 48),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'سبِّح',
-                  style: _font(settings, 34, textOnAccent, FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  hijriStr,
-                  style: _font(settings, 15, subOnAccent, FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  gregorianStr,
-                  style: _font(settings, 13, subOnAccent, FontWeight.normal),
-                ),
-              ],
-            ),
-          ),
-        ),
 
-        // ── Floating card centred at the rounded edge ──────────
-        Positioned(
-          bottom: -44,
-          child: _FloatingDhikrCard(
-            settings: settings,
-            isDark: isDark,
-            cardBg: cardBg,
-            accent: accent,
+          // ── Full-width gradient header with rounded bottom corners ─
+          Container(
+            width: double.infinity,
+            // Extra height = status bar + content
+            padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [accentDark, accent],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+              borderRadius: const BorderRadius.only(
+                bottomLeft:  Radius.circular(22),
+                bottomRight: Radius.circular(22),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 48),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/icon/SLOGO9.png',
+                    height: settings.baseFontSize * 2.5,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    hijriStr,
+                    style: _font(settings, 15, subOnAccent, FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    gregorianStr,
+                    style: _font(settings, 13, subOnAccent, FontWeight.normal),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+
+          // ── Floating card centred at the rounded edge ──────────
+          Positioned(
+            bottom: -44,
+            child: AnimatedHomeCard(
+              delay: 150,
+              child: _FloatingDhikrCard(
+                settings: settings,
+                isDark: isDark,
+                cardBg: cardBg,
+                accent: accent,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -170,7 +188,7 @@ class _HomeHeader extends StatelessWidget {
 
 // ── Floating Dhikr Card at curve ─────────────────────────────────
 
-class _FloatingDhikrCard extends StatelessWidget {
+class _FloatingDhikrCard extends StatefulWidget {
   final AppSettingsState settings;
   final bool isDark;
   final Color cardBg;
@@ -183,59 +201,188 @@ class _FloatingDhikrCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final textColor = isDark ? ColorsManager.darkTextPrimary   : ColorsManager.lightTextPrimary;
-    final subColor  = isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
+  State<_FloatingDhikrCard> createState() => _FloatingDhikrCardState();
+}
 
-    return Container(
-      width: MediaQuery.of(context).size.width - 48,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: ColorsManager.black.withValues(alpha: isDark ? 0.35 : 0.10),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+class _FloatingDhikrCardState extends State<_FloatingDhikrCard> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (t) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = widget.isDark ? ColorsManager.darkTextPrimary : ColorsManager.lightTextPrimary;
+    final subColor = widget.isDark ? ColorsManager.darkTextSecondary : ColorsManager.lightTextSecondary;
+
+    return BlocBuilder<PrayerCubit, PrayerState>(
+      builder: (context, prayerState) {
+        String label = 'ذكر اليوم';
+        String content = 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ';
+        IconData icon = Icons.auto_awesome_rounded;
+
+        if (prayerState is PrayerLoaded) {
+          final now = DateTime.now();
+          final display = _getDisplayData(prayerState, now);
+          label = display.label;
+          content = display.content;
+          icon = display.icon;
+        }
+
+        return Container(
+          width: MediaQuery.of(context).size.width - 48,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            color: widget.cardBg,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: ColorsManager.black.withValues(alpha: widget.isDark ? 0.35 : 0.10),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        textDirection: TextDirection.rtl,
-        children: [
-          // Text on the RIGHT (first in RTL)
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'ذكر اليوم',
-                  style: _font(settings, 13, subColor, FontWeight.w500),
+          child: Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: widget.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ',
-                  style: _font(settings, 15, textColor, FontWeight.bold),
-                  textAlign: TextAlign.right,
+                child: Icon(icon, color: widget.accent, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: _font(widget.settings, 13, subColor, FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      content,
+                      style: _font(widget.settings, 15, textColor, FontWeight.bold),
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          // Icon on the LEFT (last in RTL)
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.auto_awesome_rounded, color: accent, size: 22),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
+
+  _CardDisplayData _getDisplayData(PrayerLoaded state, DateTime now) {
+    const window = Duration(minutes: 25);
+    final schedule = <Prayer, DateTime>{
+      Prayer.fajr: state.times.fajr,
+      Prayer.sunrise: state.times.sunrise,
+      Prayer.dhuhr: state.times.dhuhr,
+      Prayer.asr: state.times.asr,
+      Prayer.maghrib: state.times.maghrib,
+      Prayer.isha: state.times.isha,
+    };
+
+    // 1) Current prayer check (within 25 min window)
+    Prayer? current;
+    DateTime? currentStart;
+    for (final entry in schedule.entries) {
+      if (!entry.value.isAfter(now)) {
+        if (currentStart == null || entry.value.isAfter(currentStart)) {
+          currentStart = entry.value;
+          current = entry.key;
+        }
+      }
+    }
+
+    if (current != null && currentStart != null) {
+      final elapsed = now.difference(currentStart);
+      if (elapsed < window) {
+        final isSunrise = current == Prayer.sunrise;
+        return _CardDisplayData(
+          label: isSunrise ? 'الآن وقت الشروق' : 'دخل وقت الأذان',
+          content: _prayerName(current, state.selectedDate),
+          icon: _prayerIcon(current),
+        );
+      }
+    }
+
+    // 2) Next prayer check
+    Prayer next = Prayer.fajr;
+    DateTime nextTime = state.times.fajr.add(const Duration(days: 1));
+    for (final entry in schedule.entries) {
+      if (entry.value.isAfter(now)) {
+        next = entry.key;
+        nextTime = entry.value;
+        break;
+      }
+    }
+
+    return _CardDisplayData(
+      label: next == Prayer.sunrise ? 'موعد الشروق' : 'الأذان القادم',
+      content: '${_prayerName(next, state.selectedDate)} - ${_formatTime(nextTime)}',
+      icon: _prayerIcon(next),
+    );
+  }
+}
+
+class _CardDisplayData {
+  final String label;
+  final String content;
+  final IconData icon;
+  _CardDisplayData({required this.label, required this.content, required this.icon});
+}
+
+// ── Helpers (adapted from page2.dart) ──────────────────────────────
+
+String _prayerName(Prayer p, DateTime selectedDate) {
+  switch (p) {
+    case Prayer.fajr:    return 'الفجر';
+    case Prayer.sunrise: return 'الشروق';
+    case Prayer.dhuhr:   return selectedDate.weekday == DateTime.friday ? 'الجمعة' : 'الظهر';
+    case Prayer.asr:     return 'العصر';
+    case Prayer.maghrib: return 'المغرب';
+    case Prayer.isha:    return 'العشاء';
+    default:             return '';
+  }
+}
+
+IconData _prayerIcon(Prayer p) {
+  switch (p) {
+    case Prayer.fajr:    return Icons.brightness_3_rounded;
+    case Prayer.sunrise: return Icons.wb_twilight_rounded;
+    case Prayer.dhuhr:   return Icons.wb_sunny_rounded;
+    case Prayer.asr:     return Icons.wb_cloudy_rounded;
+    case Prayer.maghrib: return Icons.nights_stay_rounded;
+    case Prayer.isha:    return Icons.dark_mode_rounded;
+    default:             return Icons.access_time_rounded;
+  }
+}
+
+String _formatTime(DateTime dt) {
+  final h = dt.hour;
+  final m = dt.minute.toString().padLeft(2, '0');
+  final period = h >= 12 ? 'م' : 'ص';
+  final hour12 = h % 12 == 0 ? 12 : h % 12;
+  return '$hour12:$m $period';
 }
 
 
@@ -263,33 +410,42 @@ class _DhikrGrid extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _SquareCard(
-                title: 'أذكار بعد الصلاة',
-                icon: Icons.mosque_outlined,
-                onTap: () => _openAdhkarPage(context, 3),
-                settings: settings,
-                isDark: isDark,
-                gradient: _brownGradient(isDark),
+              child: AnimatedHomeCard(
+                delay: 300,
+                child: _SquareCard(
+                  title: 'أذكار بعد الصلاة',
+                  icon: Icons.mosque_outlined,
+                  onTap: () => _openAdhkarPage(context, 3),
+                  settings: settings,
+                  isDark: isDark,
+                  gradient: _brownGradient(isDark),
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _SquareCard(
-                title: 'أذكار المساء',
-                icon: Icons.nights_stay_outlined,
-                onTap: () => _openAdhkarPage(context, 2),
-                settings: settings,
-                isDark: isDark,
+              child: AnimatedHomeCard(
+                delay: 300,
+                child: _SquareCard(
+                  title: 'أذكار المساء',
+                  icon: Icons.nights_stay_outlined,
+                  onTap: () => _openAdhkarPage(context, 2),
+                  settings: settings,
+                  isDark: isDark,
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _SquareCard(
-                title: 'أذكار الصباح',
-                icon: Icons.wb_sunny_outlined,
-                onTap: () => _openAdhkarPage(context, 1),
-                settings: settings,
-                isDark: isDark,
+              child: AnimatedHomeCard(
+                delay: 300,
+                child: _SquareCard(
+                  title: 'أذكار الصباح',
+                  icon: Icons.wb_sunny_outlined,
+                  onTap: () => _openAdhkarPage(context, 1),
+                  settings: settings,
+                  isDark: isDark,
+                ),
               ),
             ),
           ],
@@ -302,27 +458,33 @@ class _DhikrGrid extends StatelessWidget {
             children: [
               Expanded(
                 flex: 8,
-                child: _WideCard(
-                  title: 'المزيد من الأذكار',
-                  icon: Icons.auto_stories_outlined,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MoreAdhkarPage()),
+                child: AnimatedHomeCard(
+                  delay: 450,
+                  child: _WideCard(
+                    title: 'المزيد من الأذكار',
+                    icon: Icons.auto_stories_outlined,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MoreAdhkarPage()),
+                    ),
+                    settings: settings,
+                    isDark: isDark,
+                    gradient: _greenGradient(isDark),
                   ),
-                  settings: settings,
-                  isDark: isDark,
-                  gradient: _greenGradient(isDark),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 flex: 5,
-                child: _SquareCard(
-                  title: 'أذكار النوم',
-                  icon: Icons.bedtime_outlined,
-                  onTap: () => _openAdhkarPage(context, 4),
-                  settings: settings,
-                  isDark: isDark,
+                child: AnimatedHomeCard(
+                  delay: 450,
+                  child: _SquareCard(
+                    title: 'أذكار النوم',
+                    icon: Icons.bedtime_outlined,
+                    onTap: () => _openAdhkarPage(context, 4),
+                    settings: settings,
+                    isDark: isDark,
+                  ),
                 ),
               ),
             ],
@@ -522,25 +684,31 @@ class _DuaGrid extends StatelessWidget {
               // Square white card - دعاء صلاة الاستخارة
               Expanded(
                 flex: 5,
-                child: _SquareCard(
-                  title: 'دعاء صلاة الاستخارة',
-                  icon: Icons.menu_book_outlined,
-                  onTap: () => _showDuaBottomSheet(context, 16),
-                  settings: settings,
-                  isDark: isDark,
+                child: AnimatedHomeCard(
+                  delay: 600,
+                  child: _SquareCard(
+                    title: 'دعاء صلاة الاستخارة',
+                    icon: Icons.lightbulb_outline_rounded,
+                    onTap: () => _showDuaBottomSheet(context, 16),
+                    settings: settings,
+                    isDark: isDark,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               // Wide brown card - دعاء السفر والرجوع منه
               Expanded(
                 flex: 8,
-                child: _WideCard(
-                  title: 'دعاء السفر والرجوع منه',
-                  icon: Icons.menu_book_outlined,
-                  onTap: () => _showDuaBottomSheet(context, 14),
-                  settings: settings,
-                  isDark: isDark,
-                  gradient: _brownGradient(isDark),
+                child: AnimatedHomeCard(
+                  delay: 600,
+                  child: _WideCard(
+                    title: 'دعاء السفر والرجوع منه',
+                    icon: Icons.flight_takeoff_rounded,
+                    onTap: () => _showDuaBottomSheet(context, 14),
+                    settings: settings,
+                    isDark: isDark,
+                    gradient: _brownGradient(isDark),
+                  ),
                 ),
               ),
             ],
@@ -555,28 +723,34 @@ class _DuaGrid extends StatelessWidget {
               // Wide green card - المزيد من الأدعية
               Expanded(
                 flex: 8,
-                child: _WideCard(
-                  title: 'المزيد من الأدعية',
-                  icon: Icons.auto_stories_outlined,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MoreDuaPage()),
+                child: AnimatedHomeCard(
+                  delay: 750,
+                  child: _WideCard(
+                    title: 'المزيد من الأدعية',
+                    icon: Icons.auto_stories_outlined,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MoreDuaPage()),
+                    ),
+                    settings: settings,
+                    isDark: isDark,
+                    gradient: _greenGradient(isDark),
                   ),
-                  settings: settings,
-                  isDark: isDark,
-                  gradient: _greenGradient(isDark),
                 ),
               ),
               const SizedBox(width: 12),
               // Square white card - كفارة المجلس
               Expanded(
                 flex: 5,
-                child: _SquareCard(
-                  title: 'كفارة المجلس',
-                  icon: Icons.menu_book_outlined,
-                  onTap: () => _showDuaBottomSheet(context, 15),
-                  settings: settings,
-                  isDark: isDark,
+                child: AnimatedHomeCard(
+                  delay: 750,
+                  child: _SquareCard(
+                    title: 'كفارة المجلس',
+                    icon: Icons.groups_rounded,
+                    onTap: () => _showDuaBottomSheet(context, 15),
+                    settings: settings,
+                    isDark: isDark,
+                  ),
                 ),
               ),
             ],
@@ -1065,8 +1239,76 @@ TextStyle _font(AppSettingsState s, double relativeSize, Color color, FontWeight
   final base = s.baseFontSize;
   final size = (base + (relativeSize - 15)).clamp(10.0, 42.0);
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: size,  color: color, fontWeight: weight, height: height);
-    case 2:  return GoogleFonts.amiri(fontSize: size,  color: color, fontWeight: weight, height: height);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight, height: height);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size,  color: color, fontWeight: weight, height: height);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size,  color: color, fontWeight: weight, height: height);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight, height: height);
+  }
+}
+
+// ── Animation Widget ──────────────────────────────────────────────
+
+class AnimatedHomeCard extends StatefulWidget {
+  final Widget child;
+  final int delay;
+
+  const AnimatedHomeCard({
+    super.key,
+    required this.child,
+    this.delay = 0,
+  });
+
+  @override
+  State<AnimatedHomeCard> createState() => _AnimatedHomeCardState();
+}
+
+class _AnimatedHomeCardState extends State<AnimatedHomeCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.20),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: widget.child,
+      ),
+    );
   }
 }

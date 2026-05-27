@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sabbh/core/storage/shared_prefs_helper.dart';
 import 'package:sabbh/features/iqama_notification/iqama_countdown_logic.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _kIqamaNotifEnabled = 'iqama_notif_enabled';
 const _kIqamaNotifMode = 'iqama_notif_mode';
@@ -43,7 +44,7 @@ class AppSettingsState {
 
   /// Base font size from the 7-level scale
   double get baseFontSize {
-    const sizes = [13.0, 14.5, 16.0, 17.5, 19.0, 21.0, 23.0];
+    const sizes = [16.0, 17.5, 19.0, 20.0, 21.0, 22.0, 23.0];
     return sizes[fontSizeLevel.clamp(0, 6)];
   }
 
@@ -56,49 +57,55 @@ class AppSettingsState {
 // ── AppSettings Cubit ────────────────────────────────────────────
 
 class AppSettingsCubit extends Cubit<AppSettingsState> {
-  AppSettingsCubit()
-      : super(const AppSettingsState(
-          isDarkMode: false,
-          fontSizeLevel: 2,        // default: 16pt
-          fontFamilyIndex: 0,      // default: Tajawal
-          iqamaNotifEnabled: false,
-          iqamaNotifMode: IqamaNotifMode.before45,
-        )) {
-    _loadSettings();
+  AppSettingsCubit(super.initialState) {
+    // Initial state already loaded from SharedPreferences before runApp.
+    // Only run migration to sync legacy keys — no emit needed.
+    _runMigration();
   }
 
-  // ── Loaders ──────────────────────────────────────────────────
-
-  Future<void> _loadSettings() async {
+  /// Load saved settings synchronously before widget tree is built.
+  /// Call this in main() and pass result to AppSettingsCubit constructor.
+  static Future<AppSettingsState> loadInitial() async {
     try {
-      final prefs = SharedPrefsHelper();
-      final isDark   = await prefs.getBool('isDarkMode') ?? false;
-      final fontSize = await prefs.getInt('fontSizeLevel') ?? 2;
-      final fontFam  = await prefs.getInt('fontFamilyIndex') ?? 0;
-      final iqamaEnabled =
-          await prefs.getBool(_kIqamaNotifEnabled) ??
-          await prefs.getBool(_kLegacyIqamaNotifEnabled) ??
-          false;
-      await IqamaNotificationService.ensureModePrefsMigrated();
-      final iqamaIdx =
-          await prefs.getInt(_kIqamaNotifMode) ?? IqamaNotifMode.before45.index;
+      final prefs = await SharedPreferences.getInstance();
+      final isDark   = prefs.getBool('isDarkMode') ?? false;
+      final fontSize = prefs.getInt('fontSizeLevel') ?? 2;
+      final fontFam  = prefs.getInt('fontFamilyIndex') ?? 2;
+      final iqamaEnabled = prefs.getBool('iqama_notif_enabled') ??
+          prefs.getBool('iqamaNotifEnabled') ?? false;
+      final iqamaIdx = prefs.getInt('iqama_notif_mode') ?? IqamaNotifMode.before45.index;
       final iqamaMode = IqamaNotifMode.values[
           iqamaIdx.clamp(0, IqamaNotifMode.values.length - 1)];
-      // Keep legacy keys synced for users upgrading from older builds.
-      await prefs.setBool(_kLegacyIqamaNotifEnabled, iqamaEnabled);
-      await prefs.setInt(_kLegacyIqamaNotifMode, iqamaMode.index);
-      await prefs.setBool(_kIqamaNotifEnabled, iqamaEnabled);
-      await prefs.setInt(_kIqamaNotifMode, iqamaMode.index);
-      emit(state.copyWith(
+      return AppSettingsState(
         isDarkMode: isDark,
         fontSizeLevel: fontSize,
         fontFamilyIndex: fontFam,
         iqamaNotifEnabled: iqamaEnabled,
         iqamaNotifMode: iqamaMode,
-      ));
+      );
     } catch (_) {
-      // keep defaults
+      return const AppSettingsState(
+        isDarkMode: false,
+        fontSizeLevel: 2,
+        fontFamilyIndex: 2,
+        iqamaNotifEnabled: false,
+        iqamaNotifMode: IqamaNotifMode.before45,
+      );
     }
+  }
+
+  /// Only syncs legacy keys — does NOT emit a new state.
+  Future<void> _runMigration() async {
+    try {
+      final prefs = SharedPrefsHelper();
+      await IqamaNotificationService.ensureModePrefsMigrated();
+      final iqamaEnabled = state.iqamaNotifEnabled;
+      final iqamaMode    = state.iqamaNotifMode;
+      await prefs.setBool(_kLegacyIqamaNotifEnabled, iqamaEnabled);
+      await prefs.setInt(_kLegacyIqamaNotifMode, iqamaMode.index);
+      await prefs.setBool(_kIqamaNotifEnabled, iqamaEnabled);
+      await prefs.setInt(_kIqamaNotifMode, iqamaMode.index);
+    } catch (_) {}
   }
 
   // ── Toggles & Setters ────────────────────────────────────────

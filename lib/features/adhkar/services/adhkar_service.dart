@@ -48,7 +48,7 @@ class AdhkarService {
     
     final Map<int, AdhkarProgress> progressMap = {};
     final keys = prefs.getKeys().where(
-      (k) => k.startsWith('${_progressKeyPrefix}${categoryId}_'),
+      (k) => k.startsWith('$_progressKeyPrefix${categoryId}_'),
     );
     
     for (final key in keys) {
@@ -67,14 +67,14 @@ class AdhkarService {
 
   Future<void> saveProgress(AdhkarProgress progress) async {
     final prefs = await SharedPreferences.getInstance();
-    final key = '${_progressKeyPrefix}${progress.categoryId}_${progress.itemId}';
+    final key = '$_progressKeyPrefix${progress.categoryId}_${progress.itemId}';
     await prefs.setString(key, json.encode(progress.toJson()));
   }
 
   Future<void> resetCategoryProgress(int categoryId) async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where(
-      (k) => k.startsWith('${_progressKeyPrefix}${categoryId}_'),
+      (k) => k.startsWith('$_progressKeyPrefix${categoryId}_'),
     ).toList();
     
     for (final key in keys) {
@@ -84,7 +84,7 @@ class AdhkarService {
 
   Future<void> resetItemProgress(int categoryId, int itemId) async {
     final prefs = await SharedPreferences.getInstance();
-    final key = '${_progressKeyPrefix}${categoryId}_$itemId';
+    final key = '$_progressKeyPrefix${categoryId}_$itemId';
     await prefs.remove(key);
   }
 

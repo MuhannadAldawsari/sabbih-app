@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
@@ -412,16 +412,16 @@ class SettingsPage extends StatelessWidget {
 
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   switch (s.fontFamilyIndex) {
-    case 1:  return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight);
   }
 }
 
 TextStyle _fontByIndex(int idx, double size, Color color, FontWeight weight) {
   switch (idx) {
-    case 1:  return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
-    case 2:  return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
-    default: return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+    case 1:  return TextStyle(fontFamily: 'Cairo', fontSize: size, color: color, fontWeight: weight);
+    case 2:  return TextStyle(fontFamily: 'Amiri', fontSize: size, color: color, fontWeight: weight);
+    default: return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight);
   }
 }

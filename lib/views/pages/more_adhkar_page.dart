@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/adhkar/models/adhkar_model.dart';
 import 'package:sabbh/features/adhkar/services/adhkar_service.dart';
@@ -79,13 +78,16 @@ class _MoreAdhkarPageState extends State<MoreAdhkarPage> {
                 style: _font(settings, 18, textColor, FontWeight.bold),
               ),
             ),
-            body: _buildBody(
-              settings: settings,
-              isDark: isDark,
-              cardBg: cardBg,
-              textColor: textColor,
-              subColor: subColor,
-              accent: accent,
+            body: ColoredBox(
+              color: bg,
+              child: _buildBody(
+                settings: settings,
+                isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subColor: subColor,
+                accent: accent,
+              ),
             ),
           ),
         );
@@ -402,10 +404,10 @@ TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight,
   final adjusted = size + (s.baseFontSize - 16.0);
   switch (s.fontFamilyIndex) {
     case 1:
-      return GoogleFonts.cairo(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Cairo', fontSize: adjusted, color: color, fontWeight: weight, height: height);
     case 2:
-      return GoogleFonts.amiri(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Amiri', fontSize: adjusted, color: color, fontWeight: weight, height: height);
     default:
-      return GoogleFonts.tajawal(fontSize: adjusted, color: color, fontWeight: weight, height: height);
+      return TextStyle(fontFamily: 'Tajawal', fontSize: adjusted, color: color, fontWeight: weight, height: height);
   }
 }

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sabbh/core/resources/colores.dart';
 import 'package:sabbh/features/iqama_notification/iqama_countdown_logic.dart';
 import 'package:sabbh/features/iqama_notification/iqama_notification_service.dart';
+import 'package:sabbh/features/prayer_times/prayer_cubit.dart';
 import 'package:sabbh/theme_controller/app_settings_cubit.dart';
 
 class IqamaNotificationPage extends StatefulWidget {
@@ -57,7 +57,9 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                 ),
               ],
             ),
-            body: ListView(
+            body: ColoredBox(
+              color: bg,
+              child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
               children: [
                 _card(
@@ -69,8 +71,20 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                     subColor: subColor,
                     value: settings.iqamaNotifEnabled,
                     onChanged: (value) async {
-                      final messenger = ScaffoldMessenger.of(context);
                       final settingsCubit = context.read<AppSettingsCubit>();
+                      final prayerState = context.read<PrayerCubit>().state;
+                      
+                      if (value && prayerState is! PrayerLoaded) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('الرجاء تحديد الموقع أولاً لتفعيل إشعارات وقت الإقامة'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+
+                      final messenger = ScaffoldMessenger.of(context);
                       final currentMode = settingsCubit.state.iqamaNotifMode;
                       if (value) {
                         await IqamaNotificationService.instance.ensureAndroidNotificationPermission();
@@ -177,6 +191,7 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
                 ),
               ],
             ),
+            ),
           ),
         );
       },
@@ -225,7 +240,7 @@ class _IqamaNotificationPageState extends State<IqamaNotificationPage> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
-            content: Text('تم تفعيل المنبهات الدقيقة بنجاح.'),
+            content: Text('تم تفعيل إشعار وقت الإقامة بنجاح.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -320,10 +335,10 @@ String _modeLabel(IqamaNotifMode mode) {
 TextStyle _font(AppSettingsState s, double size, Color color, FontWeight weight) {
   switch (s.fontFamilyIndex) {
     case 1:
-      return GoogleFonts.cairo(fontSize: size, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Cairo', fontSize: size, color: color, fontWeight: weight);
     case 2:
-      return GoogleFonts.amiri(fontSize: size, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Amiri', fontSize: size, color: color, fontWeight: weight);
     default:
-      return GoogleFonts.tajawal(fontSize: size, color: color, fontWeight: weight);
+      return TextStyle(fontFamily: 'Tajawal', fontSize: size, color: color, fontWeight: weight);
   }
 }

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:adhan/adhan.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -33,6 +33,25 @@ const _kAlarmRevision = 'iqama_alarm_revision';
 const _kIqamaNotifModeSchemaV2 = 'iqama_notif_mode_schema_v2';
 const _kLegacyIqamaNotifModeCamel = 'iqamaNotifMode';
 const _kExactAlarmBlocked = 'iqama_exact_alarm_blocked';
+
+const _kMorningAdhkarEnabled = 'morning_adhkar_enabled';
+const _kMorningAdhkarSound = 'morning_adhkar_sound';
+const _kMorningAdhkarHour = 'morning_adhkar_hour';
+const _kMorningAdhkarMinute = 'morning_adhkar_minute';
+
+const _kEveningAdhkarEnabled = 'evening_adhkar_enabled';
+const _kEveningAdhkarSound = 'evening_adhkar_sound';
+const _kEveningAdhkarHour = 'evening_adhkar_hour';
+const _kEveningAdhkarMinute = 'evening_adhkar_minute';
+
+const _kMorningAdhkarAlarmId = 4000;
+const _kEveningAdhkarAlarmId = 4001;
+
+const _kAdhkarMorningChannelId = 'adhkar_morning_channel_id_v4';
+const _kAdhkarMorningSilentChannelId = 'adhkar_morning_silent_channel_id_v4';
+const _kAdhkarEveningChannelId = 'adhkar_evening_channel_id_v4';
+const _kAdhkarEveningSilentChannelId = 'adhkar_evening_silent_channel_id_v4';
+
 
 class IqamaNotificationService {
   IqamaNotificationService._();
@@ -104,6 +123,21 @@ class IqamaNotificationService {
     final androidPlugin = _notifications
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
+
+    // ── Clean Up Old Channels ──
+    final channels = await androidPlugin?.getNotificationChannels();
+    if (channels != null) {
+      for (final channel in channels) {
+        if (channel.id != _kNotifChannelId &&
+            channel.id != _kAdhkarMorningChannelId &&
+            channel.id != _kAdhkarMorningSilentChannelId &&
+            channel.id != _kAdhkarEveningChannelId &&
+            channel.id != _kAdhkarEveningSilentChannelId) {
+          await androidPlugin?.deleteNotificationChannel(channel.id);
+        }
+      }
+    }
+
     await androidPlugin?.createNotificationChannel(
       const AndroidNotificationChannel(
         _kNotifChannelId,
@@ -112,6 +146,46 @@ class IqamaNotificationService {
         importance: Importance.defaultImportance,
         playSound: false,
         enableVibration: false,
+      ),
+    );
+
+    // ── Adhkar Channels ──
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _kAdhkarMorningChannelId,
+        'أذكار الصباح (بصوت)',
+        description: 'تنبيهات لقراءة أذكار الصباح مع تشغيل الصوت المخصص',
+        importance: Importance.max,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('morning'),
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _kAdhkarMorningSilentChannelId,
+        'أذكار الصباح (صامت)',
+        description: 'تنبيهات لقراءة أذكار الصباح تظهر كإشعار صامت فقط',
+        importance: Importance.max,
+        playSound: false,
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _kAdhkarEveningChannelId,
+        'أذكار المساء (بصوت)',
+        description: 'تنبيهات لقراءة أذكار المساء مع تشغيل الصوت المخصص',
+        importance: Importance.max,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound('evening'),
+      ),
+    );
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _kAdhkarEveningSilentChannelId,
+        'أذكار المساء (صامت)',
+        description: 'تنبيهات لقراءة أذكار المساء تظهر كإشعار صامت فقط',
+        importance: Importance.max,
+        playSound: false,
       ),
     );
   }
@@ -125,6 +199,7 @@ class IqamaNotificationService {
     if (!exactAllowed) return;
     final mode = await _getMode();
     await _scheduleWindowModeAlarms(mode);
+    await scheduleAdhkarAlarms();
   }
 
   Future<void> updateThemeMode(bool isDark) async {
@@ -436,6 +511,116 @@ class IqamaNotificationService {
     await prefs.setInt(_kAlarmRevision, next);
     return next;
   }
+
+  // ── Adhkar Logic ────────────────────────────────────────────────
+
+  Future<void> updateAdhkarSettings({
+    required bool morningEnabled,
+    required bool morningSound,
+    required TimeOfDay morningTime,
+    required bool eveningEnabled,
+    required bool eveningSound,
+    required TimeOfDay eveningTime,
+  }) async {
+    final prefs = SharedPrefsHelper();
+    await Future.wait([
+      prefs.setBool(_kMorningAdhkarEnabled, morningEnabled),
+      prefs.setBool(_kMorningAdhkarSound, morningSound),
+      prefs.setInt(_kMorningAdhkarHour, morningTime.hour),
+      prefs.setInt(_kMorningAdhkarMinute, morningTime.minute),
+
+      prefs.setBool(_kEveningAdhkarEnabled, eveningEnabled),
+      prefs.setBool(_kEveningAdhkarSound, eveningSound),
+      prefs.setInt(_kEveningAdhkarHour, eveningTime.hour),
+      prefs.setInt(_kEveningAdhkarMinute, eveningTime.minute),
+    ]);
+
+    await scheduleAdhkarAlarms();
+  }
+
+  Future<void> scheduleAdhkarAlarms() async {
+    final prefs = SharedPrefsHelper();
+    final morningEnabled = await prefs.getBool(_kMorningAdhkarEnabled) ?? true;
+    final morningHour = await prefs.getInt(_kMorningAdhkarHour) ?? 5;
+    final morningMinute = await prefs.getInt(_kMorningAdhkarMinute) ?? 0;
+    
+    final eveningEnabled = await prefs.getBool(_kEveningAdhkarEnabled) ?? true;
+    final eveningHour = await prefs.getInt(_kEveningAdhkarHour) ?? 16;
+    final eveningMinute = await prefs.getInt(_kEveningAdhkarMinute) ?? 0;
+
+    await AndroidAlarmManager.cancel(_kMorningAdhkarAlarmId);
+    if (morningEnabled) {
+      final now = DateTime.now();
+      var morningTime = DateTime(now.year, now.month, now.day, morningHour, morningMinute);
+      if (morningTime.isBefore(now)) {
+        morningTime = morningTime.add(const Duration(days: 1));
+      }
+      await AndroidAlarmManager.oneShotAt(
+        morningTime,
+        _kMorningAdhkarAlarmId,
+        _morningAdhkarCallback,
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true,
+        allowWhileIdle: true,
+      );
+    }
+
+    await AndroidAlarmManager.cancel(_kEveningAdhkarAlarmId);
+    if (eveningEnabled) {
+      final now = DateTime.now();
+      var eveningTime = DateTime(now.year, now.month, now.day, eveningHour, eveningMinute);
+      if (eveningTime.isBefore(now)) {
+        eveningTime = eveningTime.add(const Duration(days: 1));
+      }
+      await AndroidAlarmManager.oneShotAt(
+        eveningTime,
+        _kEveningAdhkarAlarmId,
+        _eveningAdhkarCallback,
+        exact: true,
+        wakeup: true,
+        rescheduleOnReboot: true,
+        allowWhileIdle: true,
+      );
+    }
+  }
+
+  Future<void> showAdhkarNotification({required bool isMorning}) async {
+    final prefs = SharedPrefsHelper();
+    final withSound = isMorning
+        ? (await prefs.getBool(_kMorningAdhkarSound) ?? true)
+        : (await prefs.getBool(_kEveningAdhkarSound) ?? true);
+
+    String channelId;
+    String channelName;
+    if (isMorning) {
+      channelId = withSound ? _kAdhkarMorningChannelId : _kAdhkarMorningSilentChannelId;
+      channelName = withSound ? 'أذكار الصباح (بصوت)' : 'أذكار الصباح (صامت)';
+    } else {
+      channelId = withSound ? _kAdhkarEveningChannelId : _kAdhkarEveningSilentChannelId;
+      channelName = withSound ? 'أذكار المساء (بصوت)' : 'أذكار المساء (صامت)';
+    }
+
+    final title = isMorning ? 'أذكار الصباح' : 'أذكار المساء';
+    final body = isMorning ? 'حان الآن وقت أذكار الصباح، فاذكر الله.' : 'حان الآن وقت أذكار المساء، فاذكر الله.';
+
+    await _notifications.show(
+      isMorning ? _kMorningAdhkarAlarmId : _kEveningAdhkarAlarmId,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: 'تنبيهات لقراءة أذكار الصباح والمساء',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: withSound,
+          sound: withSound ? RawResourceAndroidNotificationSound(isMorning ? 'morning' : 'evening') : null,
+        ),
+      ),
+    );
+  }
 }
 
 class _NotificationContent {
@@ -532,4 +717,20 @@ String _prayerName(Prayer p, DateTime prayerDate) {
     default:
       return 'الصلاة';
   }
+}
+
+@pragma('vm:entry-point')
+Future<void> _morningAdhkarCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await IqamaNotificationService.instance.init();
+  await IqamaNotificationService.instance.showAdhkarNotification(isMorning: true);
+  await IqamaNotificationService.instance.scheduleAdhkarAlarms();
+}
+
+@pragma('vm:entry-point')
+Future<void> _eveningAdhkarCallback() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await IqamaNotificationService.instance.init();
+  await IqamaNotificationService.instance.showAdhkarNotification(isMorning: false);
+  await IqamaNotificationService.instance.scheduleAdhkarAlarms();
 }
