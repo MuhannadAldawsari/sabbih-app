@@ -115,7 +115,7 @@ class IqamaNotificationService {
   Future<void> init() async {
     if (!Platform.isAndroid) return;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('ic_notification');
     await _notifications.initialize(
       const InitializationSettings(android: androidSettings),
     );
