@@ -147,7 +147,7 @@ class SettingsPage extends StatelessWidget {
                         // 8 level dots picker
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(7, (i) {
+                          children: List.generate(8, (i) {
                             final selected = settings.fontSizeLevel == i;
                             return GestureDetector(
                               onTap: () => context.read<AppSettingsCubit>().setFontSizeLevel(i),
@@ -301,8 +301,8 @@ class SettingsPage extends StatelessWidget {
   }
 
   static const _fontSizeLabels = [
-    'صغير جداً', 'صغير', 'عادي', 'متوسط',
-    'كبير', 'كبير+', 'ضخم'
+    'صغير جدا', 'صغير+', 'صغير', 'عادي', 'متوسط',
+    'كبير', 'كبير+', 'كبير جدا'
   ];
 
   Widget _sectionLabel(String text, AppSettingsState s, Color color) {

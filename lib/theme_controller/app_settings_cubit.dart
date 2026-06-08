@@ -42,10 +42,10 @@ class AppSettingsState {
     );
   }
 
-  /// Base font size from the 7-level scale
+  /// Base font size from the 8-level scale
   double get baseFontSize {
-    const sizes = [16.0, 17.5, 19.0, 20.0, 21.0, 22.0, 23.0];
-    return sizes[fontSizeLevel.clamp(0, 6)];
+    const sizes = [15.0, 16.0, 17.5, 19.0, 20.0, 21.0, 22.0, 23.0];
+    return sizes[fontSizeLevel.clamp(0, 7)];
   }
 
   /// Font family name string (used by GoogleFonts)
@@ -117,7 +117,7 @@ class AppSettingsCubit extends Cubit<AppSettingsState> {
   }
 
   Future<void> setFontSizeLevel(int level) async {
-    final clamped = level.clamp(0, 6);
+    final clamped = level.clamp(0, 7);
     emit(state.copyWith(fontSizeLevel: clamped));
     await SharedPrefsHelper().setInt('fontSizeLevel', clamped);
   }
