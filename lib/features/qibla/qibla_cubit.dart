@@ -107,6 +107,14 @@ class QiblaCubit extends Cubit<QiblaState> {
   static const int _magWindowSize = 4;
   final List<double> _magBuffer = [];
 
+  // ── Violent-movement detection ────────────────────────────────
+  bool _isMovingViolently = false;
+
+  /// Restarts the compass listener to get a fresh calibration matrix from the OS.
+  void refreshCompass() {
+    _startCompass();
+  }
+
   /// Start compass and tilt detection once location is known.
   void setLoading(bool loading) {
     emit(state.copyWith(isLoading: loading));
@@ -207,12 +215,27 @@ class QiblaCubit extends Cubit<QiblaState> {
     ).listen(
       (event) {
         if (isClosed) return;
-        // Gravity ~9.8 on z-axis when flat. Check deviation.
+
+        // ── Tilt detection (existing logic) ───────────────────────
         final zDeviation = (event.z - 9.8).abs();
         final xyMagnitude = sqrt(event.x * event.x + event.y * event.y);
         final tilted = zDeviation > _tiltThreshold || xyMagnitude > _tiltThreshold;
         if (tilted != state.isPhoneTilted) {
           emit(state.copyWith(isPhoneTilted: tilted));
+        }
+
+        // ── Violent-movement detection for auto compass refresh ────────
+        final totalAcceleration = sqrt(
+          event.x * event.x + event.y * event.y + event.z * event.z,
+        );
+        final deviation = (totalAcceleration - 9.8).abs();
+
+        if (deviation > 2.5) {
+          _isMovingViolently = true;
+        } else if (deviation < 0.8 && _isMovingViolently) {
+          // Violent movement just stopped — refresh compass immediately
+          _isMovingViolently = false;
+          refreshCompass();
         }
       },
       onError: (_) {},

@@ -720,7 +720,11 @@ class _CompassView extends StatelessWidget {
           accent: accent,
         ),
       ),
-    );
+    ).whenComplete(() {
+      if (context.mounted) {
+        context.read<QiblaCubit>().refreshCompass();
+      }
+    });
   }
 }
 
