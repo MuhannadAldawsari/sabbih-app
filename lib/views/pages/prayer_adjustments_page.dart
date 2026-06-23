@@ -73,7 +73,7 @@ class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
                     // Description
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
                         child: Text(
                           'يمكنك تعديل وقت الأذان، واختيار الموقع اليدوي من هنا.',
                           style: _font(settings, 13, subColor, FontWeight.normal),
@@ -142,7 +142,7 @@ class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
 
                     // Prayer adjustment cards
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 100),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate(
                           PrayerCubit.prayerKeys.map((key) {
@@ -157,7 +157,7 @@ class _PrayerAdjustmentsPageState extends State<PrayerAdjustmentsPage> {
                             }
 
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.only(bottom: 10),
                               child: _AdjustmentCard(
                                 prayerKey: key,
                                 label: label,
@@ -219,7 +219,7 @@ class _Header extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 24),
+      padding: EdgeInsets.fromLTRB(20, topPad + 8, 20, 18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [accentDark, accent],
@@ -246,10 +246,10 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text('تعديل أوقات الأذان',
-              style: _font(settings, 24, ColorsManager.white, FontWeight.bold)),
-          const SizedBox(height: 4),
+              style: _font(settings, 20, ColorsManager.white, FontWeight.bold)),
+          const SizedBox(height: 2),
           Text('تعديل الدقائق + اختيار الموقع اليدوي',
-              style: _font(settings, 13,
+              style: _font(settings, 12,
                   ColorsManager.white.withValues(alpha: 0.8), FontWeight.w500)),
         ],
       ),
@@ -291,7 +291,7 @@ class _AdjustmentCard extends StatelessWidget {
             : '$adjustment د';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
@@ -319,10 +319,10 @@ class _AdjustmentCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: _font(settings, 16, textColor, FontWeight.w700)),
+                Text(label, style: _font(settings, 14, textColor, FontWeight.w700)),
                 if (timeStr != null) ...[
                   const SizedBox(height: 2),
-                  Text(timeStr!, style: _font(settings, 12, subColor, FontWeight.normal)),
+                  Text(timeStr!, style: _font(settings, 11, subColor, FontWeight.normal)),
                 ],
               ],
             ),

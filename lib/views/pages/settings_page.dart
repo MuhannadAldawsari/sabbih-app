@@ -29,14 +29,14 @@ class SettingsPage extends StatelessWidget {
             body: SafeArea(
               bottom: false,
               child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
               children: [
                 Text(
                   'الإعدادات',
                   textAlign: TextAlign.right,
-                  style: _font(settings, 24, textColor, FontWeight.bold),
+                  style: _font(settings, 22, textColor, FontWeight.bold),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
 
                 // ── المظهر ─────────────────────────────────────
                 _sectionLabel('المظهر', settings, subColor),
@@ -55,7 +55,7 @@ class SettingsPage extends StatelessWidget {
                     onChanged: (_) => context.read<AppSettingsCubit>().toggleTheme(),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // ── الخط ──────────────────────────────────────
                 _sectionLabel('نوع الخط', settings, subColor),
@@ -106,7 +106,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // ── حجم الخط ──────────────────────────────────
                 _sectionLabel('حجم الخط', settings, subColor),
@@ -191,7 +191,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // ── أوقات الأذان ──────────────────────────────
                 _sectionLabel('أوقات الأذان', settings, subColor),
@@ -226,7 +226,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // ── إشعار الإقامة ───────────────────────────────
                 _sectionLabel('إشعار الإقامة', settings, subColor),
@@ -258,7 +258,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // ── الإشعارات ─────────────────────────────────
                 _sectionLabel('الإشعارات', settings, subColor),
@@ -290,7 +290,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -334,7 +334,7 @@ class SettingsPage extends StatelessWidget {
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           Container(

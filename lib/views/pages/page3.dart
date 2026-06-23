@@ -554,30 +554,30 @@ class _CompassView extends StatelessWidget {
         : (isQiblaAligned ? 'assets/images/kaaba2.png' : 'assets/images/kaaba1.png');
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
       child: Column(
         children: [
           // Heading display
           if (heading != null)
             Text(
               '${heading.toStringAsFixed(0)}°',
-              style: _font(settings, 48, textColor, FontWeight.bold),
+              style: _font(settings, 42, textColor, FontWeight.bold),
             ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           SizedBox(
-            width: 56,
-            height: 56,
+            width: 44,
+            height: 44,
             child: Image.asset(
               kaabaAsset,
               fit: BoxFit.contain,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           // Compass dial with fixed top indicator
           SizedBox(
-            width: 300,
-            height: 298,
+            width: 280,
+            height: 278,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -594,8 +594,8 @@ class _CompassView extends StatelessWidget {
                 Positioned(
                   top: 14,
                   child: SizedBox(
-                    width: 280,
-                    height: 280,
+                    width: 260,
+                    height: 260,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
@@ -621,8 +621,8 @@ class _CompassView extends StatelessWidget {
 
                         // Kaaba icon at center
                         Container(
-                          width: 52,
-                          height: 52,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: cardBg,
                             shape: BoxShape.circle,
@@ -634,7 +634,7 @@ class _CompassView extends StatelessWidget {
                               ),
                             ],
                           ),
-                          child: Icon(Icons.mosque_rounded, color: accent, size: 26),
+                          child: Icon(Icons.mosque_rounded, color: accent, size: 22),
                         ),
                       ],
                     ),
@@ -644,11 +644,11 @@ class _CompassView extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           // Info card
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: cardBg,
               borderRadius: BorderRadius.circular(16),

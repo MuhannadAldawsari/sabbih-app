@@ -162,7 +162,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
                       ),
                       // All 5 prayer times
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 160),
+                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 160),
                         sliver: SliverList(
                           delegate: SliverChildListDelegate(
                             _buildPrayerCards(
@@ -217,7 +217,7 @@ class _PrayerTimesViewState extends State<_PrayerTimesView> {
     return prayers.map((p) {
       final isNext = highlightedPrayer != null && highlightedPrayer == p.prayer;
       return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.only(bottom: 9),
         child: _PrayerCard(
           entry: p,
           isNext: isNext,
@@ -335,7 +335,7 @@ class _LocationControls extends StatelessWidget {
           // ── Date navigation (replaces manual location dropdown) ─
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
               decoration: BoxDecoration(
                 color: cardBg,
                 borderRadius: BorderRadius.circular(14),
@@ -353,6 +353,8 @@ class _LocationControls extends StatelessWidget {
                     onPressed: onPrevDay,
                     icon: Icon(Icons.chevron_left_rounded, color: accent, size: 26),
                     tooltip: 'اليوم السابق',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                   ),
                   Expanded(
                     child: Column(
@@ -375,6 +377,8 @@ class _LocationControls extends StatelessWidget {
                     onPressed: onNextDay,
                     icon: Icon(Icons.chevron_right_rounded, color: accent, size: 26),
                     tooltip: 'اليوم التالي',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                   ),
                 ],
               ),
@@ -493,9 +497,9 @@ class _NextPrayerCard extends StatelessWidget {
         : accent;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [cardStart, cardEnd],
@@ -674,7 +678,7 @@ class _PrayerCard extends StatelessWidget {
         : '--:--';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       decoration: BoxDecoration(
         color: isNext ? accent.withValues(alpha: 0.10) : cardBg,
         borderRadius: BorderRadius.circular(16),
@@ -693,15 +697,15 @@ class _PrayerCard extends StatelessWidget {
         children: [
           // Icon (first child in RTL => visual right)
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: (isNext ? accent : accent).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(entry.icon,
-                color: accent, size: 18),
+                color: accent, size: 17),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 11),
           // Text (center)
           Expanded(
             child: Text(
@@ -715,7 +719,7 @@ class _PrayerCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           // Time (last child in RTL => visual left)
           Text(
             timeStr,
